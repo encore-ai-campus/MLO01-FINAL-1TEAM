@@ -1,26 +1,3 @@
-
-name: Monitoring CI
-
-on:
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  validate:
-    name: Validate Monitoring
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Check monitoring files
-        
 name: Monitoring CI
 
 on:
@@ -62,4 +39,3 @@ jobs:
 
       - name: CI completed
         run: echo "Monitoring CI validation passed"
-
