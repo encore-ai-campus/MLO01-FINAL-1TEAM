@@ -1,0 +1,170 @@
+{
+  "groups": [
+    {
+      "name": "monitoring-derived",
+      "rules": [
+        {
+          "record": "monitoring:tracked_up",
+          "expr": "up and on (server, check, target_id) (monitoring:expected == 1)"
+        },
+        {
+          "record": "monitoring:check_state",
+          "expr": "max by (server, check) (monitoring:tracked_up{job!~\"http|tcp|dns|postgres\"} or ((probe_success or pg_up) and on (job, server, check, instance, target_id) (monitoring:tracked_up{job=~\"http|tcp|dns|postgres\"} == 1))) or on (server, check) max by (server, check) (monitoring:expected - 2)"
+        },
+        {
+          "record": "monitoring:cpu_used_percent",
+          "expr": "(100 * (1 - avg by (server, check, target_id) (rate(node_cpu_seconds_total{job=~\"linux|fw-system\",mode=\"idle\"}[5m]))) or 100 * (1 - avg by (server, check, target_id) (rate(windows_cpu_time_seconds_total{mode=\"idle\",core!=\"_Total\"}[5m])))) and on (server, check, target_id) (monitoring:tracked_up == 1)"
+        },
+        {
+          "record": "monitoring:memory_used_percent",
+          "expr": "(100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) or 100 * (1 - windows_memory_physical_free_bytes / windows_memory_physical_total_bytes)) and on (server, check, target_id) (monitoring:tracked_up == 1)"
+        },
+        {
+          "record": "monitoring:disk_used_percent",
+          "expr": "(100 * (1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|devtmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/run(/.*)?|/var/lib/(docker|containers)/.*\"} / (node_filesystem_size_bytes > 0)) or 100 * (1 - windows_logical_disk_free_bytes{volume=~\"[A-Za-z]:\"} / (windows_logical_disk_size_bytes > 0))) and on (server, check, target_id) (monitoring:tracked_up == 1)"
+        },
+        {
+          "record": "monitoring:uptime_seconds",
+          "expr": "(time() - node_boot_time_seconds or time() - windows_system_boot_time_timestamp) and on (server, check, target_id) (monitoring:tracked_up == 1)"
+        }
+      ]
+    },
+    {
+      "name": "monitoring-alerts",
+      "rules": [
+        {
+          "alert": "TargetUnavailable",
+          "expr": "max by (server, check) (monitoring:tracked_up == 0) or on (server, check) max by (server, check) ((monitoring:expected == 1) unless on (server, check, target_id) monitoring:tracked_up)",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} {{ $labels.check }} 수집 실패 또는 시계열 누락"
+          }
+        },
+        {
+          "alert": "WebOrApiUnavailable",
+          "expr": "(monitoring:check_state{check=~\"web-http|app-health|app-auth|pipe-health|grafana\"} == 0)",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} {{ $labels.check }} HTTP 점검 실패"
+          }
+        },
+        {
+          "alert": "DNSUnavailable",
+          "expr": "monitoring:check_state{check=\"dc-dns\"} == 0",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "DC01 DNS 응답 또는 예상 DNS 레코드 검증 실패"
+          }
+        },
+        {
+          "alert": "DatabaseUnavailable",
+          "expr": "monitoring:check_state{check=~\"postgres|postgres-tcp|qdrant-health|minio-health\"} == 0",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} {{ $labels.check }} 데이터 서비스 점검 실패"
+          }
+        },
+        {
+          "alert": "LDAPUnavailable",
+          "expr": "monitoring:check_state{check=\"dc-ldap\"} == 0",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "DC01 LDAP 포트에 연결할 수 없음"
+          }
+        },
+        {
+          "alert": "ProbeTelemetryMissing",
+          "expr": "monitoring:check_state{check=~\"web-http|app-health|app-auth|pipe-health|grafana|dc-dns|dc-ldap|postgres|postgres-tcp|qdrant-health|minio-health\"} == -1 and on (server, check) (monitoring:tracked_up == 1)",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} {{ $labels.check }} 상태 메트릭 누락"
+          }
+        },
+        {
+          "alert": "HighCPU",
+          "expr": "monitoring:cpu_used_percent > 85",
+          "for": "10m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} CPU 사용률 85% 초과"
+          }
+        },
+        {
+          "alert": "LowMemory",
+          "expr": "monitoring:memory_used_percent > 90",
+          "for": "10m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} 메모리 사용률 90% 초과"
+          }
+        },
+        {
+          "alert": "LowDiskSpace",
+          "expr": "monitoring:disk_used_percent > 85",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} 파일시스템 사용률 85% 초과"
+          }
+        },
+        {
+          "alert": "FilesystemError",
+          "expr": "node_filesystem_device_error{job=\"linux\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/run(/.*)?|/var/lib/(docker|containers)/.*\"} == 1",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ $labels.server }} 파일시스템 통계 수집 오류"
+          }
+        },
+        {
+          "alert": "DirectoryServiceStopped",
+          "expr": "windows_service_state{server=\"DC01\",state=\"running\"} == 0",
+          "for": "3m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "DC01 {{ $labels.name }} 서비스가 실행 중이 아님"
+          }
+        },
+        {
+          "alert": "PrometheusCardinalityHigh",
+          "expr": "prometheus_tsdb_head_series{check=\"prometheus\"} > 10000",
+          "for": "10m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "MON01 Prometheus 시계열이 초기 운영 예산 10000개 초과"
+          }
+        }
+      ]
+    }
+  ]
+}

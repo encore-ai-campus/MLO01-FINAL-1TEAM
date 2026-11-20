@@ -1,0 +1,41 @@
+name: Monitoring CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Monitoring
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check monitoring files
+        run: |
+          test -f infra/monitoring/README.md
+          test -f infra/monitoring/deploy.sh
+          test -f infra/monitoring/compose.yml
+
+      - name: Validate deployment script
+        run: |
+          bash -n infra/monitoring/deploy.sh
+
+      - name: Validate Docker Compose
+        run: |
+          docker compose version
+          docker compose -f infra/monitoring/compose.yml config --quiet
+
+      - name: Validate optional SNMP profile
+        run: |
+          docker compose --profile snmp -f infra/monitoring/compose.yml config --quiet
+
+      - name: CI completed
+        run: echo "Monitoring CI validation passed"
