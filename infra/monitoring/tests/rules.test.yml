@@ -1,0 +1,136 @@
+{
+  "rule_files": [
+    "../rules.yml"
+  ],
+  "evaluation_interval": "30s",
+  "tests": [
+    {
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "monitoring:expected{server=\"DC01\",check=\"dc-dns\",target_id=\"fixture\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "monitoring:expected{server=\"DB01\",check=\"postgres\",target_id=\"fixture\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "monitoring:expected{server=\"APP01\",check=\"app-system\",target_id=\"new-address\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "monitoring:expected{server=\"FW01\",check=\"fw-system\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "up{server=\"DC01\",check=\"dc-dns\",target_id=\"fixture\",job=\"dns\",instance=\"fixture:80\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "probe_success{server=\"DC01\",check=\"dc-dns\",target_id=\"fixture\",job=\"dns\",instance=\"fixture:80\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "up{server=\"DB01\",check=\"postgres\",target_id=\"fixture\",job=\"postgres\",instance=\"fixture:80\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "pg_up{server=\"DB01\",check=\"postgres\",target_id=\"fixture\",job=\"postgres\",instance=\"fixture:80\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "up{server=\"APP01\",check=\"app-system\",target_id=\"old-address\",job=\"linux\",instance=\"fixture:80\"}",
+          "values": "1+0x12"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "monitoring:check_state",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "monitoring:check_state{server=\"APP01\",check=\"app-system\"}",
+              "value": -1
+            },
+            {
+              "labels": "monitoring:check_state{server=\"DC01\",check=\"dc-dns\"}",
+              "value": 0
+            },
+            {
+              "labels": "monitoring:check_state{server=\"DB01\",check=\"postgres\"}",
+              "value": 0
+            },
+            {
+              "labels": "monitoring:check_state{server=\"FW01\",check=\"fw-system\"}",
+              "value": -2
+            }
+          ]
+        },
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "ALERTS{alertname=\"DNSUnavailable\",alertstate=\"firing\",server=\"DC01\",check=\"dc-dns\",severity=\"critical\"}",
+              "value": 1
+            },
+            {
+              "labels": "ALERTS{alertname=\"DatabaseUnavailable\",alertstate=\"firing\",server=\"DB01\",check=\"postgres\",severity=\"critical\"}",
+              "value": 1
+            },
+            {
+              "labels": "ALERTS{alertname=\"TargetUnavailable\",alertstate=\"firing\",server=\"APP01\",check=\"app-system\",severity=\"critical\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "monitoring:expected{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "up{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",instance=\"fixture:80\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "node_cpu_seconds_total{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",mode=\"idle\",instance=\"fixture:80\"}",
+          "values": "0+0x40"
+        },
+        {
+          "series": "node_memory_MemAvailable_bytes{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",instance=\"fixture:80\"}",
+          "values": "5+0x40"
+        },
+        {
+          "series": "node_memory_MemTotal_bytes{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",instance=\"fixture:80\"}",
+          "values": "100+0x40"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",mountpoint=\"/\",fstype=\"ext4\",instance=\"fixture:80\"}",
+          "values": "10+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{server=\"MON01\",check=\"mon-system\",target_id=\"fixture\",job=\"linux\",mountpoint=\"/\",fstype=\"ext4\",instance=\"fixture:80\"}",
+          "values": "100+0x40"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"HighCPU|LowMemory|LowDiskSpace\"})",
+          "eval_time": "20m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 3
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

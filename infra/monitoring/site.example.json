@@ -1,0 +1,31 @@
+{
+  "targets": {
+    "fw-system": null,
+    "fw-interfaces": null,
+    "dc-system": null,
+    "dc-dns": null,
+    "dc-ldap": null,
+    "web-system": null,
+    "web-http": null,
+    "web-metrics": null,
+    "app-system": null,
+    "app-health": null,
+    "app-auth": null,
+    "app-metrics": null,
+    "pipe-system": null,
+    "pipe-health": null,
+    "pipe-metrics": null,
+    "db-system": null,
+    "postgres": null,
+    "postgres-tcp": null,
+    "qdrant-health": null,
+    "minio-health": null,
+    "minio-usage": null,
+    "mon-system": null
+  },
+  "dns": {
+    "name": null,
+    "type": "SRV",
+    "answer_pattern": null
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "checks": [
+    {
+      "check": "fw-system",
+      "server": "FW01",
+      "job": "fw-system",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "fw-interfaces",
+      "server": "FW01",
+      "job": "snmp",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "dc-system",
+      "server": "DC01",
+      "job": "windows",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "dc-dns",
+      "server": "DC01",
+      "job": "dns",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "dc-ldap",
+      "server": "DC01",
+      "job": "tcp",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "web-system",
+      "server": "WEB01",
+      "job": "linux",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "web-http",
+      "server": "WEB01",
+      "job": "http",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "web-metrics",
+      "server": "WEB01",
+      "job": "app",
+      "reported_ip": null,
+      "target": null
+    },
+    {
+      "check": "app-system",
+      "server": "APP01",
+      "job": "linux",
+      "reported_ip": "192.168.0.158",
+      "target": null
+    },
+    {
+      "check": "app-health",
+      "server": "APP01",
+      "job": "http",
+      "reported_ip": "192.168.0.158",
+      "target": null
+    },
+    {
+      "check": "app-auth",
+      "server": "APP01",
+      "job": "http",
+      "reported_ip": "192.168.0.158",
+      "target": null
+    },
+    {
+      "check": "app-metrics",
+      "server": "APP01",
+      "job": "app",
+      "reported_ip": "192.168.0.158",
+      "target": null
+    },
+    {
+      "check": "pipe-system",
+      "server": "PIPE01",
+      "job": "linux",
+      "reported_ip": "192.168.0.157",
+      "target": null
+    },
+    {
+      "check": "pipe-health",
+      "server": "PIPE01",
+      "job": "http",
+      "reported_ip": "192.168.0.157",
+      "target": null
+    },
+    {
+      "check": "pipe-metrics",
+      "server": "PIPE01",
+      "job": "app",
+      "reported_ip": "192.168.0.157",
+      "target": null
+    },
+    {
+      "check": "db-system",
+      "server": "DB01",
+      "job": "linux",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "postgres",
+      "server": "DB01",
+      "job": "postgres",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "postgres-tcp",
+      "server": "DB01",
+      "job": "tcp",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "qdrant-health",
+      "server": "DB01",
+      "job": "http",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "minio-health",
+      "server": "DB01",
+      "job": "http",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "minio-usage",
+      "server": "DB01",
+      "job": "minio",
+      "reported_ip": "192.168.0.159",
+      "target": null
+    },
+    {
+      "check": "mon-system",
+      "server": "MON01",
+      "job": "linux",
+      "reported_ip": "192.168.0.156",
+      "target": null
+    },
+    {
+      "check": "prometheus",
+      "server": "MON01",
+      "job": "internal",
+      "reported_ip": "127.0.0.1",
+      "target": "127.0.0.1:9090"
+    },
+    {
+      "check": "blackbox",
+      "server": "MON01",
+      "job": "internal",
+      "reported_ip": "127.0.0.1",
+      "target": "127.0.0.1:9115"
+    },
+    {
+      "check": "alertmanager",
+      "server": "MON01",
+      "job": "internal",
+      "reported_ip": "127.0.0.1",
+      "target": "127.0.0.1:9093"
+    },
+    {
+      "check": "grafana",
+      "server": "MON01",
+      "job": "http",
+      "reported_ip": "127.0.0.1",
+      "target": "http://127.0.0.1:3000/api/health"
+    }
+  ],
+  "dns": {
+    "name": null,
+    "type": "SRV",
+    "answer_pattern": null
+  }
+}
