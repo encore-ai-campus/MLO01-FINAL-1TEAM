@@ -1,0 +1,311 @@
+{
+  "uid": "infra-auth-dns",
+  "title": "Authentication & DNS",
+  "description": "LDAP TCP 연결, AD 서비스 상태, DNS 레코드 검증, APP01 인증 연동 헬스는 각각의 신호입니다.",
+  "tags": [
+    "infrastructure"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "DC01 · DNS · LDAP · 앱 인증",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"dc-system|dc-dns|dc-ldap|app-auth\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "AD 핵심 Windows 서비스",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "label_replace((max(windows_service_state{server=\"DC01\",name=~\"(?i)NTDS\",state=\"running\"}) or vector(-1)), \"name\", \"NTDS\", \"\", \"\") or label_replace((max(windows_service_state{server=\"DC01\",name=~\"(?i)DNS\",state=\"running\"}) or vector(-1)), \"name\", \"DNS\", \"\", \"\") or label_replace((max(windows_service_state{server=\"DC01\",name=~\"(?i)Netlogon\",state=\"running\"}) or vector(-1)), \"name\", \"Netlogon\", \"\", \"\") or label_replace((max(windows_service_state{server=\"DC01\",name=~\"(?i)Kdc\",state=\"running\"}) or vector(-1)), \"name\", \"Kdc\", \"\", \"\")",
+          "legendFormat": "{{name}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "DC01 CPU 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:cpu_used_percent{server=\"DC01\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "DC01 메모리 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:memory_used_percent{server=\"DC01\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "DNS 응답 시간",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "probe_dns_duration_seconds{check=\"dc-dns\"}",
+          "legendFormat": "{{phase}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "인증 연동 HTTP 점검 시간",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "probe_duration_seconds{check=\"app-auth\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

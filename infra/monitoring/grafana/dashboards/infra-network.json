@@ -1,0 +1,498 @@
+{
+  "uid": "infra-network",
+  "title": "Network Monitoring",
+  "description": "FW01 시스템은 FreeBSD Node Exporter, 인터페이스는 SNMPv3를 사용합니다. ifOperStatus 값 1이 UP입니다.",
+  "tags": [
+    "infrastructure"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "FW01 수집 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"fw-system|fw-interfaces\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "FW01 가동 시간",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:uptime_seconds{server=\"FW01\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "FW01 1분 부하",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "node_load1{server=\"FW01\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "FW01 인터페이스 운영 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "ifOperStatus{server=\"FW01\"} == bool 1",
+          "legendFormat": "{{ifName}} {{ifDescr}} · {{ifIndex}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "FW01 수신 트래픽",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(ifHCInOctets{server=\"FW01\"}[10m])",
+          "legendFormat": "{{ifName}} {{ifDescr}} · {{ifIndex}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "FW01 송신 트래픽",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(ifHCOutOctets{server=\"FW01\"}[10m])",
+          "legendFormat": "{{ifName}} {{ifDescr}} · {{ifIndex}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "FW01 수신 오류",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(ifInErrors{server=\"FW01\"}[10m])",
+          "legendFormat": "{{ifName}} {{ifDescr}} · {{ifIndex}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "FW01 송신 오류",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(ifOutErrors{server=\"FW01\"}[10m])",
+          "legendFormat": "{{ifName}} {{ifDescr}} · {{ifIndex}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "서비스 네트워크 접근 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"web-http|app-health|app-auth|pipe-health|postgres|qdrant-health|minio-health|dc-dns|dc-ldap|postgres-tcp\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "프로토콜 점검 시간",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "probe_duration_seconds{job=~\"http|tcp|dns\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

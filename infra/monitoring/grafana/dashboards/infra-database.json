@@ -1,0 +1,381 @@
+{
+  "uid": "infra-database",
+  "title": "Database & Storage",
+  "description": "PostgreSQL의 pg_up과 TCP 포트 접근을 별도로 표시합니다.",
+  "tags": [
+    "infrastructure"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "데이터 서비스 가용성",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"postgres|postgres-tcp|qdrant-health|minio-health\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "MinIO 저장소 메트릭 수집",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"minio-usage\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "PostgreSQL 연결 수",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "sum by (server, datname) (pg_stat_database_numbackends{check=\"postgres\"})",
+          "legendFormat": "{{server}} · {{datname}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Qdrant · MinIO 헬스 점검 시간",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "probe_duration_seconds{check=~\"qdrant-health|minio-health\"}",
+          "legendFormat": "{{check}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "MinIO 오브젝트 저장량",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "minio_cluster_usage_objects_total_bytes{check=\"minio-usage\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "MinIO 오브젝트 수",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "minio_cluster_usage_objects_count{check=\"minio-usage\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "DB01 디스크 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:disk_used_percent{server=\"DB01\"}",
+          "legendFormat": "{{mountpoint}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "DB01 파일시스템 통계 오류",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "node_filesystem_device_error{server=\"DB01\",fstype!~\"tmpfs|devtmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/run(/.*)?|/var/lib/(docker|containers)/.*\"}",
+          "legendFormat": "{{mountpoint}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

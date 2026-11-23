@@ -1,0 +1,565 @@
+{
+  "uid": "infra-overview",
+  "title": "Infrastructure Overview",
+  "description": "서버 상태는 호스트 Exporter 수집 결과입니다. 대시보드의 점검 상태는 실제 수집 결과와 구성 여부를 반영합니다.",
+  "tags": [
+    "infrastructure"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "인벤토리 서버",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "count(count by (server) (monitoring:expected{check=~\"(fw|dc|web|app|pipe|db|mon)-system\"}))",
+          "legendFormat": "서버",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "활성 점검",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "sum(monitoring:expected)",
+          "legendFormat": "점검",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "활성 경고",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "sum(ALERTS{alertstate=\"firing\"}) or (0 * sum(monitoring:expected{check=\"prometheus\"} == 1))",
+          "legendFormat": "발화 중",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "서버별 Exporter 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"(fw|dc|web|app|pipe|db|mon)-system\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "주요 서비스 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"web-http|app-health|app-auth|pipe-health|postgres|qdrant-health|minio-health|dc-dns|dc-ldap\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "CPU 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:cpu_used_percent",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "메모리 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:memory_used_percent",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "서버별 최대 디스크 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "max by (server) (monitoring:disk_used_percent)",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "발화 중인 경고",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "모니터링 구성요소",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"prometheus|grafana|blackbox|alertmanager\"}",
+          "legendFormat": "{{server}} · {{check}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Prometheus 활성 시계열",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "prometheus_tsdb_head_series{check=\"prometheus\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,349 @@
+{
+  "uid": "infra-servers",
+  "title": "Server Monitoring",
+  "description": "서버 필터는 전체 인벤토리를 표시합니다. FW01 네트워크 메트릭은 Network Monitoring에서 확인합니다.",
+  "tags": [
+    "infrastructure"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "server",
+        "label": "서버",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "infra-prometheus"
+        },
+        "query": {
+          "query": "label_values(monitoring:expected, server)",
+          "refId": "server"
+        },
+        "definition": "label_values(monitoring:expected, server)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".+",
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Exporter 상태",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:check_state{check=~\"(fw|dc|web|app|pipe|db|mon)-system\",server=~\"${server:regex}\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "데이터 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "-2": {
+                  "text": "미구성",
+                  "color": "gray"
+                },
+                "-1": {
+                  "text": "데이터 없음",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "가동 시간",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:uptime_seconds{server=~\"${server:regex}\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "range": false,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "CPU 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:cpu_used_percent{server=~\"${server:regex}\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "메모리 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:memory_used_percent{server=~\"${server:regex}\"}",
+          "legendFormat": "{{server}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "디스크 사용률",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "monitoring:disk_used_percent{server=~\"${server:regex}\"}",
+          "legendFormat": "{{server}} · {{mountpoint}}{{volume}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "데이터 없음",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "네트워크 수신",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(node_network_receive_bytes_total{server=~\"${server:regex}\",device!~\"lo|veth.*|docker.*|br-.*\"}[5m]) or rate(windows_net_bytes_received_total{server=~\"${server:regex}\"}[5m])",
+          "legendFormat": "{{server}} · {{device}}{{nic}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "네트워크 송신",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "infra-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "infra-prometheus"
+          },
+          "expr": "rate(node_network_transmit_bytes_total{server=~\"${server:regex}\",device!~\"lo|veth.*|docker.*|br-.*\"}[5m]) or rate(windows_net_bytes_sent_total{server=~\"${server:regex}\"}[5m])",
+          "legendFormat": "{{server}} · {{device}}{{nic}}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "noValue": "데이터 없음"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

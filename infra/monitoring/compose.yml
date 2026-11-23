@@ -1,0 +1,89 @@
+name: infra-monitoring
+x-service: &service
+  network_mode: host
+  restart: unless-stopped
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  logging:
+    options:
+      max-size: "10m"
+      max-file: "2"
+
+services:
+  prometheus:
+    <<: *service
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.3}
+    mem_limit: 700m
+    environment:
+      GOMEMLIMIT: 480MiB
+    command:
+      - --config.file=/etc/monitoring/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=4GB
+      - --web.listen-address=127.0.0.1:9090
+      - --query.max-concurrency=4
+      - --query.max-samples=5000000
+    volumes:
+      - ./${MON_RUNTIME:-runtime}:/etc/monitoring:ro
+      - ./secrets:/run/site-secrets:ro
+      - prometheus:/prometheus
+  grafana:
+    <<: *service
+    image: grafana/grafana:${GRAFANA_VERSION:-12.3.6}
+    mem_limit: 460m
+    tmpfs: [/tmp]
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/grafana-secret
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_LOG_MODE: console
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/opt/infra-dashboards:ro
+      - ./secrets/grafana-admin:/run/grafana-secret:ro
+  blackbox:
+    <<: *service
+    image: prom/blackbox-exporter:${BLACKBOX_VERSION:-v0.27.0}
+    mem_limit: 96m
+    command:
+      - --config.file=/etc/monitoring/blackbox.yml
+      - --web.listen-address=127.0.0.1:9115
+    volumes:
+      - ./${MON_RUNTIME:-runtime}:/etc/monitoring:ro
+  alertmanager:
+    <<: *service
+    image: prom/alertmanager:${ALERTMANAGER_VERSION:-v0.28.1}
+    mem_limit: 128m
+    command:
+      - --config.file=/etc/monitoring/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=127.0.0.1:9093
+      - --cluster.listen-address=
+      - --data.retention=48h
+    volumes:
+      - ./${MON_RUNTIME:-runtime}:/etc/monitoring:ro
+      - ./secrets:/run/site-secrets:ro
+      - alertmanager:/alertmanager
+  snmp:
+    <<: *service
+    profiles: [snmp]
+    image: prom/snmp-exporter:${SNMP_VERSION:-v0.30.1}
+    mem_limit: 96m
+    command:
+      - --config.file=/run/site-secrets/snmp.yml
+      - --web.listen-address=127.0.0.1:9116
+    volumes:
+      - ./secrets:/run/site-secrets:ro
+
+volumes:
+  prometheus:
+  grafana:
+  alertmanager:
