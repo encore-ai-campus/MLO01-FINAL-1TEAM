@@ -1,0 +1,66 @@
+{
+  "_설명": "통합 시험용 합성 문서. versions[].current 가 true 인 버전을 documents.current_version_id 가 가리킴. 청크 section_path 는 제{i}조. concepts 는 init.sql 시드에 더하는 시험 개념(대표 사규가 권한 밖·폐기·다른 팩·없는 문서를 가리킴). discoverable 은 is_discoverable, graph 는 ontology_graph_meta(is_active 는 일부러 틀리게 둠)",
+  "concepts": [
+    {"concept_id": "CON-T-001", "canonical_term": "여비규정", "synonyms": ["출장여비"], "knowledge_pack": "base",
+     "description": "시험용 개념",
+     "related_doc_ids": ["T-PUB", "T-ALL", "T-HR", "T-FIN", "T-LGL", "T-ITS", "T-ECO", "T-BENCH", "T-RETIRED", "T-PENDING",
+                         "T-REV", "T-BADPTR", "T-HR-SAL", "T-PUB-SAL", "T-EX", "NO-SUCH-DOC"]}
+  ],
+  "documents": [
+    {"doc_id": "T-PUB", "graph": {"workflow_name": "출장비 정산 절차", "current_step": 1, "prev_steps": [], "next_steps": [{"step": 2, "doc_id": "T-ALL", "title": "전사 공통 규정", "dept_code": "COMMON", "required_form_id": "T-HR", "is_active": false}, {"step": 3, "doc_id": "T-REV", "title": "개정 중인 규정", "dept_code": "COMMON", "required_form_id": "T-RETIRED", "is_active": false}, {"step": 4, "doc_id": "T-RETIRED", "title": "폐기된 규정", "dept_code": "COMMON", "required_form_id": "T-EX", "is_active": true}], "conflicts": [{"target_doc_id": "T-HR", "target_title": "인사 규정", "clause_pair": "제1조 ↔ 제1조", "priority_rule": "부서 최신 세칙 우선 적용"}, {"target_doc_id": "T-PENDING", "target_title": "검수 대기 규정", "clause_pair": "제1조 ↔ 제4조", "priority_rule": "부서 최신 세칙 우선 적용"}]}, "discoverable": true, "title": "회사 소개", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [
+       {"tag": "v0.9", "status": "archived", "chunks": ["옛 판의 출장비 정산 기준입니다."]},
+       {"tag": "v1.0", "status": "active", "current": true, "chunks": ["회사 소개와 출장비 정산 기준을 안내합니다."]}]},
+    {"doc_id": "T-ALL", "graph": {"workflow_name": "출장비 정산 절차", "current_step": 2, "prev_steps": [{"step": 1, "doc_id": "T-PUB", "title": "회사 소개", "dept_code": "COMMON", "is_active": false}, {"step": 1, "doc_id": "T-HR", "title": "인사 규정", "dept_code": "HR", "is_active": true}], "next_steps": [{"step": 3, "doc_id": "T-FIN", "title": "재무 규정", "dept_code": "FIN", "required_form_id": "STD-FIN-022", "is_active": true}, {"step": 3, "doc_id": "T-ECO", "title": "커머스 운영 규정", "dept_code": "CX", "is_active": true}, {"step": 4, "doc_id": "T-BADPTR", "title": "포인터가 어긋난 규정", "dept_code": "COMMON", "is_active": true}, {"step": 4, "doc_id": "T-PENDING", "title": "검수 대기 규정", "dept_code": "COMMON", "is_active": true}, {"step": 5, "doc_id": "NO-SUCH-DOC", "title": "없는 문서", "dept_code": "COMMON", "is_active": true}], "conflicts": [{"target_doc_id": "T-LGL", "target_title": "법무 규정", "clause_pair": "제1조 ↔ 제2조", "priority_rule": "부서 최신 세칙 우선 적용"}, {"target_doc_id": "T-REV", "target_title": "개정 중인 규정", "clause_pair": "제1조 ↔ 제3조", "priority_rule": "부서 최신 세칙 우선 적용"}, {"target_doc_id": "T-RETIRED", "target_title": "폐기된 규정", "clause_pair": "제1조 ↔ 제5조", "priority_rule": "부서 최신 세칙 우선 적용"}, {"target_doc_id": "T-PENDING", "target_title": "검수 대기 규정", "clause_pair": "제1조 ↔ 제6조", "priority_rule": "부서 최신 세칙 우선 적용"}]}, "title": "전사 공통 규정", "allowed_depts": ["ALL_EMP"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["전 직원의 출장비 정산 기준을 정합니다."]}]},
+    {"doc_id": "T-HR", "discoverable": true, "title": "인사 규정", "allowed_depts": ["HR"], "pack": "base", "dept_owner": "HR",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["인사팀 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-FIN", "discoverable": true, "title": "재무 규정", "allowed_depts": ["FIN"], "pack": "base", "dept_owner": "FIN",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["재무팀 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-LGL", "title": "법무 규정", "allowed_depts": ["LGL"], "pack": "base", "dept_owner": "LGL",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["법무팀 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-ITS", "title": "개발 운영 규정", "allowed_depts": ["ALL_EMP"], "pack": "it_service", "dept_owner": "ENG",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["개발 조직의 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-ECO", "discoverable": true, "title": "커머스 운영 규정", "allowed_depts": ["ALL_EMP"], "pack": "ecommerce", "dept_owner": "CX",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["커머스 조직의 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-BENCH", "title": "공공기관 출장 규정", "allowed_depts": ["PUBLIC"], "pack": "benchmark", "dept_owner": "PLN",
+     "doc_type": "benchmark_reference", "source_tier": 2,
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["공공기관 출장비 정산 기준 참고 자료입니다."]}]},
+    {"doc_id": "T-RETIRED", "discoverable": true, "title": "폐기된 규정", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "archived", "chunks": ["폐기된 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-PENDING", "title": "검수 대기 규정", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "pending_review", "chunks": ["검수 대기 중인 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-REV", "title": "개정 중인 규정", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [
+       {"tag": "v1.0", "status": "active", "current": true, "chunks": ["현행 출장비 정산 기준입니다."]},
+       {"tag": "v2.0", "status": "pending_review", "chunks": ["개정안의 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-BADPTR", "title": "포인터가 어긋난 규정", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "archived", "current": true, "chunks": ["포인터가 보관 버전을 가리키는 출장비 정산 기준입니다."]}]},
+    {"doc_id": "T-HR-SAL", "title": "연봉 밴드 기준", "allowed_depts": ["HR"], "pack": "base", "dept_owner": "HR",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": [
+       "연봉 밴드 기준 연봉 밴드 표 1", "연봉 밴드 기준 연봉 밴드 표 2", "연봉 밴드 기준 연봉 밴드 표 3",
+       "연봉 밴드 기준 연봉 밴드 표 4", "연봉 밴드 기준 연봉 밴드 표 5"]}]},
+    {"doc_id": "T-PUB-SAL", "title": "채용 안내", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": [
+       "채용 절차와 면접 일정, 복리후생 제도, 근무 환경과 사무실 위치를 소개하며 연봉 협상은 합격 뒤에 합니다.",
+       "지원서 접수 방법과 서류 심사 기준, 코딩 테스트 안내를 담았고 연봉 정보는 공개하지 않습니다.",
+       "입사 후 교육 과정과 멘토링 제도, 동호회 활동을 안내하며 연봉 인상 시기는 따로 알립니다.",
+       "자주 묻는 질문 모음으로 근무 형태, 재택 여부, 연봉 지급일과 휴가 제도를 설명합니다."]}]},
+    {"doc_id": "T-LGL-ECO", "discoverable": true, "title": "법무 인사 규정 사본", "allowed_depts": ["LGL"], "pack": "ecommerce", "dept_owner": "LGL",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": ["커머스 법무 사본 조항입니다."]}]},
+    {"doc_id": "T-LGL-OLD", "discoverable": true, "title": "법무 인사 규정 옛판", "allowed_depts": ["LGL"], "pack": "base", "dept_owner": "LGL",
+     "versions": [{"tag": "v1.0", "status": "archived", "chunks": ["폐기된 법무 옛판 조항입니다."]}]},
+    {"doc_id": "T-LGL-BAD", "discoverable": true, "title": "법무 인사 규정 어긋난 판", "allowed_depts": ["LGL"], "pack": "base", "dept_owner": "LGL",
+     "versions": [{"tag": "v1.0", "status": "archived", "current": true, "chunks": ["포인터가 보관 버전을 가리키는 법무 조항입니다."]}]},
+    {"doc_id": "T-EX", "title": "토큰화 예문", "allowed_depts": ["PUBLIC"], "pack": "base", "dept_owner": "COMMON",
+     "versions": [{"tag": "v1.0", "status": "active", "current": true, "chunks": [
+       "외주 용역 대금은 검수 완료일로부터 30일 이내에 정산합니다.",
+       "지결 올릴 때 영수증처리는 어떻게 하나요?",
+       "계약서  사전검토를 법무팀에 요청해야 하나요?",
+       "ＶＰＮ 접속 신청은 IT-INF-008 서식으로 제출한다.",
+       "연차를 반차로 나눠 쓸 수 있나요?",
+       "이 규정은 2026-11-20부터 시행하고, 판 2.0.1 로 배포한다.",
+       "e-러닝 교육을 듣는다",
+       "문의는 hr-team@example.co.kr 또는 https://intra.example.com 으로 한다."]}]}
+  ]
+}
