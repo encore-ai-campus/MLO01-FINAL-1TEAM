@@ -162,7 +162,6 @@ async def main(out: Path) -> None:
     out.write_text(json.dumps({"config": {"keyword_top_k": cfg.keyword_top_k, "vector_top_k": cfg.vector_top_k,
                                           "rrf_k": cfg.rrf_k, "result_top_n": cfg.result_top_n,
                                           "embed_model": cfg.embed_model, "expansion": cfg.ontology_expansion_enabled,
-                                          "domain_weight_tier1": cfg.domain_weight_tier1,
                                           "insufficient_coverage_chunks": cfg.insufficient_coverage_chunks},
                                "summary": summary, "questions": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=1))

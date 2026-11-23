@@ -46,19 +46,39 @@ def cfg(**kw):
     return Config(database_url="x", **kw)
 
 
-def test_fuse_rrf_merge_and_weight():
+def test_fuse_rrf_merge_without_weight():
     kw_rows = [row("A", tier=2, bm25=3.0), row("B", lexemes=("지결", "정산"), bm25=2.0)]
     vec_rows = [row("B", distance=0.1), row("C", distance=0.3)]
     out = fuse(kw_rows, vec_rows, {"지결", "정산", "기한"}, cfg())
-    assert [c.chunk_id for c in out] == ["B", "C", "A"]
-    b, c, a = out
-    assert math.isclose(b.rrf, 1 / 62 + 1 / 61) and math.isclose(b.final, b.rrf * 1.2)  # 같은 청크는 하나로
+    assert [c.chunk_id for c in out] == ["B", "A", "C"]  # RRF 가 다르면 표준 양식(A)이 공식 사규(C)보다 앞에 그대로
+    b, a, c = out
+    assert math.isclose(b.rrf, 1 / 62 + 1 / 61)  # 같은 청크는 하나로
+    assert all(x.final == x.rrf for x in out)  # 공식 사규에도 곱하지 않음(7차 회신 1절)
     assert (b.bm25, b.keyword_rank, b.matched_tokens) == (2.0, 2, 2) and math.isclose(b.cosine, 0.9)
-    assert math.isclose(c.final, 1 / 62 * 1.2) and c.bm25 is None and c.keyword_rank is None
-    assert math.isclose(a.final, 1 / 61 * 1.0) and a.cosine is None  # source_tier 2 는 가중 없음
+    assert math.isclose(c.rrf, 1 / 62) and c.bm25 is None and c.keyword_rank is None
+    assert math.isclose(a.rrf, 1 / 61) and a.cosine is None
     assert [c.chunk_id for c in fuse(kw_rows, vec_rows, set(), cfg(result_top_n=2, rrf_k=1))] == ["B", "A"]
-    b, c, a = fuse(kw_rows, vec_rows, set(), cfg(domain_weight_tier1=1.5))  # DOMAIN_WEIGHT_TIER1 을 씀
-    assert math.isclose(b.final, b.rrf * 1.5) and math.isclose(a.final, a.rrf)
+
+
+def test_fuse_puts_official_policy_first_only_on_tie():
+    kw_rows = [row("S", tier=2, bm25=1.0), row("U", tier=2, bm25=0.5)]
+    vec_rows = [row("T", distance=0.2), row("R", tier=2, distance=0.4)]
+    out = fuse(kw_rows, vec_rows, set(), cfg())
+    assert out[0].rrf == out[1].rrf == 1 / 61 and out[2].rrf == out[3].rrf == 1 / 62
+    # 1위 동점: 공식 사규 T 가 chunk_id 가 앞서는 표준 양식 S 보다 앞. 2위 동점(둘 다 표준 양식)은 chunk_id 순
+    assert [c.chunk_id for c in out] == ["T", "S", "R", "U"]
+
+
+def test_fuse_tie_survives_float_sum_order():
+    # 세 채널 순위가 자리만 바뀐 X(표준 양식: 키워드 1·벡터 2·그래프 7)와 Y(공식 사규: 키워드 7·벡터 1·그래프 2)
+    fill = [row(f"F{i}", tier=2, bm25=1.0) for i in range(5)]
+    kw_rows = [row("X", tier=2, bm25=1.0), *fill, row("Y", bm25=1.0)]
+    vec_rows = [row("Y", distance=0.1), row("X", tier=2, distance=0.2)]
+    graph_rows = [fill[0], row("Y"), *fill[1:], row("X", tier=2)]
+    out = fuse(kw_rows, vec_rows, set(), cfg(), graph_rows)
+    x, y = (next(c for c in out if c.chunk_id == i) for i in "XY")
+    assert x.rrf != y.rrf and math.isclose(x.rrf, y.rrf)  # 더하는 순서가 달라 1 ulp 갈림(X 가 큼)
+    assert [c.chunk_id for c in out if c.chunk_id in "XY"] == ["Y", "X"]  # 그래도 동점으로 보고 공식 사규 먼저
 
 
 def test_expand_off_matches_concept_only():

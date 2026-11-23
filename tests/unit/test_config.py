@@ -28,16 +28,16 @@ def test_llm_values_default_and_env():
 
 def test_rule_and_app_values_default_to_current_and_read_env():
     c = Config(database_url="x")
-    assert (c.domain_weight_tier1, c.insufficient_coverage_min, c.insufficient_cosine_min, c.insufficient_coverage_chunks,
+    assert (c.insufficient_coverage_min, c.insufficient_cosine_min, c.insufficient_coverage_chunks,
             c.db_connect_timeout_s, c.db_pool_size, c.embed_warmup_timeout_s, c.rules_path) == (
-        1.2, 0.40, 0.21, 10, 5.0, 10, 3.0, "")
-    names = ("DOMAIN_WEIGHT_TIER1", "INSUFFICIENT_COVERAGE_MIN", "INSUFFICIENT_COSINE_MIN", "INSUFFICIENT_COVERAGE_CHUNKS",
+        0.40, 0.21, 10, 5.0, 10, 3.0, "")
+    names = ("INSUFFICIENT_COVERAGE_MIN", "INSUFFICIENT_COSINE_MIN", "INSUFFICIENT_COVERAGE_CHUNKS",
              "DB_CONNECT_TIMEOUT_S", "DB_POOL_SIZE", "EMBED_WARMUP_TIMEOUT_S", "RULES_PATH")
-    values = ("1.0", "0.5", "0.3", "5", "2.5", "4", "1.5", "/x/rules.yaml")
+    values = ("0.5", "0.3", "5", "2.5", "4", "1.5", "/x/rules.yaml")
     c = Config.from_env({"DATABASE_URL": "x", **dict(zip(names, values))})
-    assert (c.domain_weight_tier1, c.insufficient_coverage_min, c.insufficient_cosine_min, c.insufficient_coverage_chunks,
+    assert (c.insufficient_coverage_min, c.insufficient_cosine_min, c.insufficient_coverage_chunks,
             c.db_connect_timeout_s, c.db_pool_size, c.embed_warmup_timeout_s, c.rules_path) == (
-        1.0, 0.5, 0.3, 5, 2.5, 4, 1.5, "/x/rules.yaml")
+        0.5, 0.3, 5, 2.5, 4, 1.5, "/x/rules.yaml")
     c = Config.from_env({"DATABASE_URL": "x", "INSUFFICIENT_COVERAGE_MIN": "0", "INSUFFICIENT_COSINE_MIN": "1"})
     assert (c.insufficient_coverage_min, c.insufficient_cosine_min) == (0, 1)  # 경계값은 받음
 
@@ -50,7 +50,6 @@ def test_rule_and_app_values_default_to_current_and_read_env():
     {"DATABASE_URL": "x", "RERANK_ENABLED": "true"},           # 모델 없음
     *({"DATABASE_URL": "x", name: v} for name in ("INSUFFICIENT_COVERAGE_MIN", "INSUFFICIENT_COSINE_MIN")
       for v in ("-0.01", "1.01", "nan", "inf")),               # 근거 부족 기준값은 0~1
-    *({"DATABASE_URL": "x", "DOMAIN_WEIGHT_TIER1": v} for v in ("0", "-1", "nan", "inf")),  # 가중은 0 보다 큰 유한값
     *({"DATABASE_URL": "x", "TERM_STATS_REFRESH_S": v} for v in ("0", "-1", "nan", "inf")),  # 갱신 주기도 0 보다 큰 유한값
     {"DATABASE_URL": "x", "LLM_BASE_URL": "http://h/v1"},                          # 주소가 있는데 모델이 없음
     {"DATABASE_URL": "x", "LLM_BASE_URL": "http://h/v1", "LLM_MODEL": "m", "LLM_MAX_CONCURRENCY": "0"},  # 슬롯 0

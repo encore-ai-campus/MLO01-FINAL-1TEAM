@@ -82,7 +82,7 @@ def _referenced_ids(meta: dict) -> set[str]:
 
 def fuse(keyword_rows: list, vector_rows: list, kw_tokens: set[str], cfg: Config, graph_rows: list | None = None
          ) -> list[RetrievedChunk]:
-    """RRF 로 합치고 같은 청크는 하나로, 도메인 가중을 곱해 상위 N 개."""
+    """RRF 로 합치고 같은 청크는 하나로, 점수가 같으면 공식 사규를 앞에 두어 상위 N 개."""
     found: dict[str, RetrievedChunk] = {}
 
     def get(r) -> RetrievedChunk:
@@ -107,9 +107,11 @@ def fuse(keyword_rows: list, vector_rows: list, kw_tokens: set[str], cfg: Config
         ch.rrf += cfg.rrf_weight_graph / (cfg.rrf_k + rank)
     # 05 근접성 보정·06 재순위 자리: 둘 다 꺼짐(켜면 Config 가 시작을 막음). 순서를 그대로 넘김
     for ch in found.values():
-        # 07 도메인 가중(2차 R1): 공식 사규만 곱함. benchmark 는 가중이 아니라 기본 검색에서 뺌. 개념 일치 가산점은 값 대기(F13)
-        ch.final = ch.rrf * (cfg.domain_weight_tier1 if ch.doc.source_tier == 1 else 1.0)
-    return sorted(found.values(), key=lambda c: (-c.final, c.chunk_id))[: cfg.result_top_n]
+        ch.final = ch.rrf  # 개념 일치 가산점 자리(값 대기, F13)
+    # 07 공식 사규 우선(2차 R1 → 7차 회신 1절: 동점일 때만): 곱하지 않고 RRF 가 같을 때만 source_tier 1 을 앞에.
+    # benchmark 는 우선순위가 아니라 기본 검색에서 뺌
+    # ponytail: float 덧셈 순서로 생기는 1 ulp 차이를 동점으로 봄. RRF_K·RRF_WEIGHT_* 를 바꾸면 값 사이 최소 간격을 다시 잼
+    return sorted(found.values(), key=lambda c: (-round(c.final, 12), c.doc.source_tier != 1, c.chunk_id))[: cfg.result_top_n]
 
 
 class KnowledgeEngine:

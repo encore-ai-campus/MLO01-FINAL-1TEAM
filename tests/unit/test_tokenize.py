@@ -30,7 +30,7 @@ def test_symbol_variant_matches_either_form():
     assert tokenize_ko("e러닝 교육") == tokenize_ko("e-러닝 교육") == ["e러닝", "교육"]
 
 
-# 메인기획 확인 대기(사전 용어 정규화): 받아들이지 않으면 이 시험을 되돌림
+# 사전 용어 정규화(경계 계약 2.4, 7차 회신 2절 확정)
 def test_dictionary_terms_normalized():
     load_dictionary([ConceptTerm("온보딩 체크리스트", ("신입OJT",)), ConceptTerm("방화벽 오픈 신청", ("DB접근권한", "VPN발급")),
                      ConceptTerm("e-러닝 과정")], "norm")

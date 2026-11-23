@@ -41,7 +41,7 @@ class RetrievedChunk:
     cosine: float | None = None      # 벡터 채널에 없으면 None
     graph_rank: int | None = None    # 그래프 채널(graph_hybrid) 목록 순위
     rrf: float = 0.0
-    final: float = 0.0               # rrf × 도메인 가중
+    final: float = 0.0               # 지금은 rrf 와 같음(개념 일치 가산점 자리)
 
 
 @dataclass(frozen=True)

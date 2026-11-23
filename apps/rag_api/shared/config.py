@@ -33,8 +33,6 @@ class Config:
     discover_hint_limit: int = 3
     term_stats_refresh_s: float = 300.0
     # 메인기획 규칙 값(rules.md). 값이 바뀌면 설정만 바꿈. 판정은 쓰는 모듈의 코드가 함
-    # 도메인 가중(2차 R1): 공식 사규(source_tier 1)에 곱하고 그 밖은 1.0. benchmark 팩은 가중이 아니라 기본 검색에서 뺌(약속서 회신 §4)
-    domain_weight_tier1: float = 1.2
     # 근거 부족(R3, A46): 상위 N 청크의 질의 토큰 덮음 최댓값이나 벡터 1위 코사인이 기준보다 작으면 근거 부족(qa)
     insufficient_coverage_min: float = 0.40
     insufficient_cosine_min: float = 0.21
@@ -68,8 +66,6 @@ class Config:
         for name in ("insufficient_coverage_min", "insufficient_cosine_min"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name.upper()}: 0~1 이어야 합니다 ({getattr(self, name)})")
-        if not 0 < self.domain_weight_tier1 < math.inf:
-            raise ValueError(f"DOMAIN_WEIGHT_TIER1: 0 보다 큰 유한한 값이어야 합니다 ({self.domain_weight_tier1})")
         if not 0 < self.term_stats_refresh_s < math.inf:  # 0·음수면 통계 SQL 이 쉬지 않고 돌고, nan·inf 면 갱신이 안 됨
             raise ValueError(f"TERM_STATS_REFRESH_S: 0 보다 큰 유한한 값이어야 합니다 ({self.term_stats_refresh_s})")
         if self.llm_base_url and not self.llm_model:

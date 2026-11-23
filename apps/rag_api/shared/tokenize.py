@@ -39,7 +39,7 @@ def load_dictionary(concepts: list[ConceptTerm], dict_version: str) -> None:
     spaced: set[str] = set()
     for c in concepts:
         for term in (c.canonical_term, *c.synonyms):
-            term = _normalize(term)  # 메인기획 확인 대기(사전 용어 정규화): 받아들이지 않으면 이 줄을 되돌림
+            term = _normalize(term)  # 사전 용어도 본문과 같이 정규화(경계 계약 2.4, 7차 회신 2절 확정)
             joined = "".join(term.split())
             if len(joined) < 2:  # 한 글자 용어는 넣지 않음
                 continue
@@ -49,9 +49,9 @@ def load_dictionary(concepts: list[ConceptTerm], dict_version: str) -> None:
                 words.add(stripped)
             if joined != term:
                 spaced.add(" ".join(term.split()))
-                bare = " ".join(filter(None, map(_strip_symbols, term.split())))  # 메인기획 확인 대기(사전 용어 정규화): 받아들이지 않으면 이 줄을 되돌림
-                if " " in bare:  # 띄어 쓴 기호 용어는 기호 뺀 꼴도 접음. 메인기획 확인 대기(사전 용어 정규화): 받아들이지 않으면 이 줄을 되돌림
-                    spaced.add(bare)  # 메인기획 확인 대기(사전 용어 정규화): 받아들이지 않으면 이 줄을 되돌림
+                bare = " ".join(filter(None, map(_strip_symbols, term.split())))
+                if " " in bare:  # 띄어 쓴 기호 용어는 기호 뺀 꼴도 접음(경계 계약 2.4, 7차 회신 2절 확정)
+                    spaced.add(bare)
     kiwi = Kiwi()
     for w in sorted(words):
         kiwi.add_user_word(w, "NNP", 0.0)
