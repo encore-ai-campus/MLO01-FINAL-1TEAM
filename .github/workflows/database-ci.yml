@@ -1,0 +1,50 @@
+name: Database CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'infra/database/**'
+      - '.github/workflows/database-ci.yml'
+
+  push:
+    branches:
+      - dev
+    paths:
+      - 'infra/database/**'
+      - '.github/workflows/database-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Database Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check required files
+        run: |
+          test -s infra/database/compose.yml
+          test -s infra/database/.env.example
+          test -s infra/database/.gitignore
+          test -s infra/database/pg_hba.conf.template
+          test -s infra/database/init-extensions.sql
+          test -s infra/database/README.md
+
+      - name: Validate Docker Compose
+        run: |
+          docker compose version
+          docker compose \
+            --env-file infra/database/.env.example \
+            -f infra/database/compose.yml \
+            config --quiet
+
+      - name: CI completed
+        run: echo "Database configuration validation passed"
