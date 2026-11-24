@@ -21,7 +21,8 @@ class Rules:
     groupware_guides: tuple[tuple[re.Pattern, str], ...]  # 개인·실시간 조회의 메뉴별 그룹웨어 안내
     groupware_guide_default: str                      # 맞는 메뉴가 없을 때
     evidence_priority_instruction: str                # R1 주·보조 근거 지시(LLM)
-    standard_template_header: str                     # R1 인용이 2순위만일 때 머리말. {title}
+    standard_template_header: str                     # R1 인용에 공식 사규가 없고 첫 문서가 표준 양식일 때 머리말. {title}
+    benchmark_reference_header: str                   # 같은 때 첫 문서가 외부 참고 사례(benchmark_reference)일 때. {title}
     scheduled_revision_notice: str                    # 5-08 시행 예정 안내. {effective_from}
     legal_disclaimer: str                             # 5-11 면책 문구
     legal_disclaimer_depts: tuple[str, ...]           # 면책 문구를 붙이는 소관 부서(HR·LGL)
@@ -82,6 +83,7 @@ def load(path: str | Path = "") -> Rules:
                  groupware_guides=tuple(guides), groupware_guide_default=text("groupware_guide_default"),
                  evidence_priority_instruction=text("evidence_priority_instruction"),
                  standard_template_header=text("standard_template_header", ("title",)),
+                 benchmark_reference_header=text("benchmark_reference_header", ("title",)),
                  scheduled_revision_notice=text("scheduled_revision_notice", ("effective_from",)),
                  legal_disclaimer=text("legal_disclaimer"), legal_disclaimer_depts=texts("legal_disclaimer_depts"),
                  conflict_instruction=text("conflict_instruction", ("a", "b", "priority_rule")))
