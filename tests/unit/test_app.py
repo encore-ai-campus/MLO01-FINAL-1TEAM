@@ -56,6 +56,10 @@ def test_body_app_has_no_auth_routes_or_overrides(app):
 # --- 오류 모양 ----------------------------------------------------------------------------------------------------
 
 def test_error_bodies(app, caplog):
+    r = request(app, "POST", "/api/v1/search/documents", json={"query": "보낸-질의-값" * 100})  # 200자 넘음
+    err = r.json()["error"]
+    assert r.status_code == 422 and set(r.json()) == {"error"} and set(err) == {"code", "message", "trace_id"}
+    assert err["code"] == "VALIDATION_FAILED" and err["trace_id"].startswith("srch-") and "보낸-질의-값" not in r.text
     r = request(app, "GET", "/api/v1/nowhere")
     assert (r.status_code, r.json()["error"]["code"]) == (404, "NOT_FOUND")
 
@@ -66,6 +70,11 @@ def test_error_bodies(app, caplog):
         r = request(app, "GET", "/api/v1/search/boom")
     assert r.status_code == 500 and r.json()["error"]["code"] == "INTERNAL_ERROR" and "민감한" not in r.text
     assert any(r.json()["error"]["trace_id"] in rec.getMessage() and rec.exc_info for rec in caplog.records)
+
+
+def test_405_has_allow_header(app):
+    r = request(app, "PUT", "/api/v1/search/documents")
+    assert (r.status_code, r.headers["allow"], r.json()["error"]["code"]) == (405, "POST", "VALIDATION_FAILED")
 
 
 @pytest.mark.parametrize("exc, status", [

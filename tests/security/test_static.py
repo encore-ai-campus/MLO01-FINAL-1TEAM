@@ -5,6 +5,7 @@ from pathlib import Path
 
 APP = Path(__file__).parents[2] / "apps" / "rag_api"
 KE = APP / "knowledge_engine"
+SEARCH = APP / "search"  # 검색도 생성 LLM 0건(search.md, 검색 API 계획 3.4)
 READS_DOCS = re.compile(r"\b(FROM|JOIN)\s+(chunks|documents)\b", re.I)
 # 생성 LLM 클라이언트로 쓰일 수 있는 라이브러리·모듈
 LLM_MODULES = re.compile(r"^(openai|anthropic|vllm|ollama|litellm|langchain\w*|google\.generativeai)(\.|$)|(^|\.)(llm\w*|qa)(\.|$)")
@@ -68,9 +69,9 @@ def test_no_generation_llm_import():
         assert any(LLM_MODULES.search(m) for _, m in imported(ast.parse(src))), src
     for src in ("from rag_api.shared import config", "from rag_api.knowledge_engine.types import RetrievalQuery"):
         assert not any(LLM_MODULES.search(m) for _, m in imported(ast.parse(src))), src
-    names = [name for name, _ in trees(KE)]
-    assert "knowledge_engine/engine.py" in names
-    for name, tree in trees(KE):
+    names = [name for name, _ in trees(KE, SEARCH)]
+    assert {"search/service.py", "knowledge_engine/engine.py"} <= set(names)
+    for name, tree in trees(KE, SEARCH):
         for lineno, m in imported(tree):
             assert not LLM_MODULES.search(m), f"{name}:{lineno} {m}"
 
