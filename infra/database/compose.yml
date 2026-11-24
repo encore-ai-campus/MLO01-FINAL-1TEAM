@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg17@sha256:c72b4cb8aaa0a52c0870c2b0a48173c595ee9bef0f3d8f92c3f546c69fef3567
+    container_name: rag-postgres
+    restart: unless-stopped
+
+    ports:
+      - "${DB_BIND_IP:?DB_BIND_IP required}:5432:5432"
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: rag_dev
+      TZ: Asia/Seoul
+
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=timescaledb,pg_textsearch
+      - -c
+      - timezone=Asia/Seoul
+
+    volumes:
+      - postgres-data:/home/postgres/pgdata/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rag_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+    name: rag-postgres-data
