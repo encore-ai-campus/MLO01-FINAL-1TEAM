@@ -61,6 +61,8 @@ def test_embed_text_format():
     assert embed_text("지출결의 규정", "ch03", "재무·회계", "제2장 정산 > 제6조 (정산 기한)", "본문\n둘째 줄") == \
         "[지출결의 규정 | ch03 재무·회계 | 제2장 정산 > 제6조 (정산 기한)]\n본문\n둘째 줄"
     assert embed_text("t", None, None, "p", "c") == "[t | ch00 공통·미분류 | p]\nc"
+    # 빈 문자열은 기본값으로 바꾸지 않음(기준 스크립트는 키가 없을 때만 기본값): 장 ID 와 이름 사이 공백은 그대로
+    assert embed_text("t", "", "", "p", "c") == "[t |   | p]\nc" and embed_text("t", "", None, "p", "c") == "[t |  공통·미분류 | p]\nc"
 
 
 @pytest.mark.parametrize("pos, bad", [(5, float("nan")), (5, float("inf")), (EMBED_DIM + 5, float("-inf"))])

@@ -51,6 +51,13 @@ def test_chunk_id_follows_version_tag_and_chapter_defaults_come_from_embed_text(
     assert cs[0].embed_text == "[제목 | ch00 공통·미분류 | 장]\n본문"
 
 
+def test_empty_chapter_keys_are_kept_as_the_script_does_but_missing_keys_get_defaults():
+    (c,) = chunks("## 장\n본문", chapter_id="", chapter_name="")
+    assert c.embed_text == "[시험 규정 |   | 장]\n본문"  # 스크립트 setdefault: 키가 있으면 빈 값도 그대로
+    (c,) = chunks("## 장\n본문", chapter_id="", chapter_name=None)
+    assert c.embed_text == "[시험 규정 |  공통·미분류 | 장]\n본문"
+
+
 def test_crlf_body_gives_the_same_chunks_as_lf():
     body = doc("가" * 300, "나" * 100, "다" * 100, "라" * 900 + "\n\n" + "마" * 900)
     assert chunks(body.replace("\n", "\r\n")) == chunks(body)
