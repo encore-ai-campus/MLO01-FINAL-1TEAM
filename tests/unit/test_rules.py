@@ -24,7 +24,9 @@ def test_packaged_rules_load():
     assert r.groupware_guides[0][1] == "개인별 잔여 연차 일수는 사내 그룹웨어 근태/휴가 메뉴에서 확인해 주세요."  # 5-12
     assert all(len(r.__dict__[k]) for k in ("personal_lookup_patterns", "procedure_patterns", "personal_numeric_patterns"))
     # qa 2단계 문구(03B 3.1·3.3 예시와 같은 문장)
-    assert r.standard_template_header.format(title="양식") == "현재 자사 확정 사규가 없어 공공 표준 양식([양식])을 기준으로 안내합니다."
+    # 9차 회신 확정 문구: 사규를 인용하지 않았을 때, 첫 인용 문서가 표준 양식이냐 외부 참고 사례냐에 따라 둘
+    assert r.standard_template_header.format(title="양식") == "현재 본 질문에 직접 해당하는 사내 공식 조항이 없어, 공공 표준 양식([양식])을 기준으로 안내합니다."
+    assert r.benchmark_reference_header.format(title="사례") == "현재 본 질문에 직접 해당하는 사내 공식 조항이 없어, 외부 참고 사례([사례])를 기준으로 안내합니다."
     assert r.scheduled_revision_notice.format(effective_from="2027-01-01") == "[안내] 본 규정은 2027-01-01 시행 예정인 개정판 기준입니다."
     assert r.legal_disclaimer == ("※ 본 답변은 사내 규정 원문에 기반한 안내이며 최종 법적·노무적 유권해석은 인사/법무 담당 부서의 "
                                   "확인이 필요합니다.") and r.legal_disclaimer_depts == ("HR", "LGL")
@@ -59,6 +61,8 @@ def test_each_key_required(tmp_path, key):
     ({"legal_disclaimer_depts": []}, "legal_disclaimer_depts: 비어 있지 않은 목록"),
     ({"legal_disclaimer_depts": ["HR", 3]}, r"legal_disclaimer_depts\[1\]: 문자열이 아님"),
     ({"standard_template_header": "양식({name})"}, "standard_template_header: 문구를 채울 수 없음"),
+    ({"benchmark_reference_header": "사례({name})"}, "benchmark_reference_header: 문구를 채울 수 없음"),
+    ({"benchmark_reference_header": 3}, "benchmark_reference_header: 문자열이 아님"),
     ({"scheduled_revision_notice": "{effective_from:%Y}"}, "scheduled_revision_notice: 문구를 채울 수 없음"),
     ({"conflict_instruction": "{a} {b} {rule}"}, "conflict_instruction: 문구를 채울 수 없음")])
 def test_bad_values_fail_at_load(tmp_path, override, error):

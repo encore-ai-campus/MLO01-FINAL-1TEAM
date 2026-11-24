@@ -46,8 +46,8 @@ def user(status="ACTIVE", dept="FIN", role="EMPLOYEE"):
 FIN = user()
 
 
-def chunk(doc_id, n=1, tier=1, effective=date(2026, 1, 1), lexemes=("정산",), dept="FIN"):
-    meta = DocMeta(doc_id, f"{doc_id} 제목", "v1.0", "official_policy" if tier == 1 else "standard_template", tier, dept,
+def chunk(doc_id, n=1, tier=1, effective=date(2026, 1, 1), lexemes=("정산",), dept="FIN", doc_type=None):
+    meta = DocMeta(doc_id, f"{doc_id} 제목", "v1.0", doc_type or ("official_policy" if tier == 1 else "standard_template"), tier, dept,
                    effective, uuid.uuid5(uuid.NAMESPACE_URL, doc_id))
     return RetrievedChunk(f"{doc_id}::v1.0::c{n:03d}", f"제{n}조", f"{doc_id} 본문 {n}", list(lexemes), meta)
 
@@ -331,12 +331,12 @@ def test_fallback_excerpts_until_llm():
     r = ask(engine)
     assert r.result == "fallback_excerpts"
     assert [e.model_dump() for e in r.excerpts] == [  # LLM 에 넘겼을 근거 그대로(1순위 먼저)
-        {"chunk_id": "P0::v1.0::c001", "doc_id": "P0", "title": "P0 제목", "section_path": "제1조", "text": "P0 본문 1",
-         "effective_from": date(2026, 11, 23), "version_badge": "scheduled"},
-        {"chunk_id": "P1::v1.0::c002", "doc_id": "P1", "title": "P1 제목", "section_path": "제2조", "text": "P1 본문 2",
-         "effective_from": date(2026, 1, 1), "version_badge": None},
-        {"chunk_id": "S0::v1.0::c001", "doc_id": "S0", "title": "S0 제목", "section_path": "제1조", "text": "S0 본문 1",
-         "effective_from": date(2026, 1, 1), "version_badge": None}]
+        {"chunk_id": "P0::v1.0::c001", "doc_id": "P0", "title": "P0 제목", "doc_type": "official_policy", "section_path": "제1조",
+         "text": "P0 본문 1", "effective_from": date(2026, 11, 23), "version_badge": "scheduled"},
+        {"chunk_id": "P1::v1.0::c002", "doc_id": "P1", "title": "P1 제목", "doc_type": "official_policy", "section_path": "제2조",
+         "text": "P1 본문 2", "effective_from": date(2026, 1, 1), "version_badge": None},
+        {"chunk_id": "S0::v1.0::c001", "doc_id": "S0", "title": "S0 제목", "doc_type": "standard_template", "section_path": "제1조",
+         "text": "S0 본문 1", "effective_from": date(2026, 1, 1), "version_badge": None}]
     assert r.status.model_dump() == {"complete": True, "degraded": True,
                                      "reason_codes": ["EMBEDDING_UNAVAILABLE", "LLM_UNAVAILABLE"]}
     assert ask(FakeEngine(result([chunk("A")]))).status.reason_codes == ["LLM_UNAVAILABLE"]
@@ -375,8 +375,8 @@ def test_answered_r1_primary_and_secondary_evidence(enough):
     assert [s.model_dump() for s in r.answer] == [{"text": "답.", "citations": ["P0::v1.0::c001", "P1::v1.0::c002"]}]
     assert r.evidence[0].model_dump() == {
         "chunk_id": "P0::v1.0::c001", "doc_id": "P0", "title": "P0 제목", "dept_owner": "FIN", "dept_name": "재무·회계·세무",
-        "section_path": "제1조", "clause_label": "[P0 제목 제1조]", "text": "P0 본문 1", "source_tier": 1,
-        "source_badge": "official", "version_id": uuid.uuid5(uuid.NAMESPACE_URL, "P0"), "version_tag": "v1.0",
+        "section_path": "제1조", "clause_label": "[P0 제목 제1조]", "text": "P0 본문 1", "doc_type": "official_policy",
+        "source_tier": 1, "source_badge": "official", "version_id": uuid.uuid5(uuid.NAMESPACE_URL, "P0"), "version_tag": "v1.0",
         "effective_from": date(2026, 1, 1), "version_badge": None}
     assert r.status.model_dump() == {"complete": True, "degraded": False, "reason_codes": []}
 
@@ -395,9 +395,34 @@ def test_answered_standard_template_header(enough):
     engine = FakeEngine(result([chunk("S0", tier=2), chunk("S1", 2, tier=2), chunk("S2", 3, tier=2)]))
     r = ask(engine, llm=FakeLLM(sentences(("답.", [2]))))
     assert [e.doc_id for e in r.evidence] == ["S1"] and r.evidence[0].source_badge is None
-    assert r.header == "현재 자사 확정 사규가 없어 공공 표준 양식([S1 제목])을 기준으로 안내합니다."  # 남은 근거 첫 문서
+    assert r.header == "현재 본 질문에 직접 해당하는 사내 공식 조항이 없어, 공공 표준 양식([S1 제목])을 기준으로 안내합니다."  # 남은 근거 첫 문서
     r = ask(engine, llm=FakeLLM(sentences(("답.", [3]), ("또.", [2]))))  # 두 문서 인용: 근거 순서의 첫 문서
     assert [e.doc_id for e in r.evidence] == ["S1", "S2"] and "([S1 제목])" in (r.header or "")
+
+
+def test_header_follows_the_first_cited_documents_type_and_cards_say_which_tier_of_evidence(enough):
+    """공식 사규 없이 인용: 첫 인용 문서가 외부 참고 사례면 그 문구, 표준 양식이면 표준 양식 문구. 사규가 하나라도 있으면 머리말 없음.
+    카드의 doc_type 으로 사규·표준 양식·외부 참고 사례를 가름(source_tier 는 둘 다 2)."""
+    bm = lambda d, n=1: chunk(d, n, tier=2, doc_type="benchmark_reference")  # noqa: E731
+    engine = FakeEngine(result([bm("B0"), chunk("S0", tier=2), chunk("S1", 2, tier=2), bm("B1", 3)]))  # 근거 E1~E4
+    benchmark = "현재 본 질문에 직접 해당하는 사내 공식 조항이 없어, 외부 참고 사례([B0 제목])를 기준으로 안내합니다."
+    r = ask(engine, llm=FakeLLM(sentences(("답.", [1]))))
+    assert r.header == benchmark and [e.doc_type for e in r.evidence] == ["benchmark_reference"]
+    assert r.evidence[0].source_tier == 2 and r.evidence[0].source_badge is None  # 호환 필드는 그대로
+    r = ask(engine, llm=FakeLLM(sentences(("답.", [4]), ("또.", [2]))))  # E2(S0)·E4(B1): 근거 순서의 첫 문서가 표준 양식
+    assert r.header == RULES.standard_template_header.format(title="S0 제목")
+    assert [e.doc_type for e in r.evidence] == ["standard_template", "benchmark_reference"]
+    r = ask(engine, llm=FakeLLM(sentences(("답.", [1, 2]))))  # 첫 문서 B0 → 외부 참고 사례 문구(다음 문서가 양식이어도)
+    assert r.header == benchmark
+    r = ask(FakeEngine(result([chunk("P0"), bm("B0")])), llm=FakeLLM(sentences(("답.", [1, 2]))))  # 사규 인용이 있으면 없음
+    assert r.header is None and [e.doc_type for e in r.evidence] == ["official_policy", "benchmark_reference"]
+
+
+def test_fallback_excerpts_carry_doc_type_too():
+    engine = FakeEngine(result([chunk("S0", tier=2), chunk("B0", tier=2, doc_type="benchmark_reference"), chunk("P0")], degraded=True))
+    r = ask(engine)  # LLM 없음 → 대체 응답, 1순위 먼저
+    assert [(e.doc_id, e.doc_type) for e in r.excerpts] == [
+        ("P0", "official_policy"), ("S0", "standard_template"), ("B0", "benchmark_reference")]
 
 
 def test_citation_validation(enough):
@@ -691,7 +716,7 @@ def test_limits_inclusive_and_fallback_shape(app, monkeypatch):
     assert r.status_code == 200 and body["trace_id"].startswith("qa-")
     assert list(body) == ["result", "excerpts", "notices", "status", "trace_id"]  # 03B 3.5 예시의 키 + notices(백엔드 결정)
     assert body["notices"] == []
-    assert list(body["excerpts"][0]) == ["chunk_id", "doc_id", "title", "section_path", "text", "effective_from",
+    assert list(body["excerpts"][0]) == ["chunk_id", "doc_id", "title", "doc_type", "section_path", "text", "effective_from",
                                          "version_badge"]
 
 
@@ -710,8 +735,8 @@ def test_answered_response_shape(app, monkeypatch):
     assert list(body) == ["result", "header", "answer", "evidence", "conflict_clauses", "notices", "status", "trace_id"]
     assert body["header"] is None and list(body["answer"][0]) == ["text", "citations"]  # 03B 3.1 예시의 키
     assert list(body["evidence"][0]) == ["chunk_id", "doc_id", "title", "dept_owner", "dept_name", "section_path",
-                                         "clause_label", "text", "source_tier", "source_badge", "version_id", "version_tag",
-                                         "effective_from", "version_badge"]
+                                         "clause_label", "text", "doc_type", "source_tier", "source_badge", "version_id",
+                                         "version_tag", "effective_from", "version_badge"]
     assert list(body["conflict_clauses"][0]) == ["source_doc_id", "target_doc_id", "target_title", "clause_pair",
                                                  "priority_rule"]  # 03B 3.2. 엔진 안쪽 키는 내지 않음
     app.state.engine = FakeEngine(result([chunk("H", effective=date(2099, 1, 1), dept="HR")]))

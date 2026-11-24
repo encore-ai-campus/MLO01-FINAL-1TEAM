@@ -84,6 +84,8 @@ SYSTEM_PROMPT = ("너는 사내 규정 안내 도우미다. <evidence> 안의 �
 # 열거나 닫는 `<` 의 모양: 뒤(공백 허용)에 `|`(`<|im_end|>` 꼴), 또는 `/`(공백 허용)와 함께 구분자·개발 Qwen 의 태그형 토큰이 옴
 TAG = re.compile(r"<(?=\s*(?:\||/?\s*(?:evidence|question|think|tool_call|tool_response|tts_)))", re.IGNORECASE)
 # 근거 구역 표시(7차 회신 1절 4절 1). 지시문(rules.yaml evidence_priority_instruction)이 [주 근거]·[보조 근거]로 가리킴
+# ponytail: 보조 구역은 "공공 표준 양식" 하나. 답변 검색은 외부 참고 사례를 넣지 않음(include_benchmark 없음). 답변에 외부 사례를 켜면
+# doc_type 별 구역 표시와 evidence_priority_instruction 문구를 함께 나눌 것(외부 사례를 표준 양식이라 알리지 않게)
 PRIMARY, SECONDARY = "[주 근거 — 사내 공식 사규]", "[보조 근거 — 공공 표준 양식 (사내 규정 아님)]"
 SECTION = re.compile(r"([\[【])(?=\s*(?:주|보조)\s*근거)")
 # Cf 가 아니면서 보이지 않는 글자: CGJ, 한글 채움, 변형 선택자, 몽골 자유 변형 선택자·모음 구분, 크메르 내재 모음
@@ -255,7 +257,9 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
     # 지금 데이터는 양쪽에 적힘
     cards = conflict_cards({d: graph.get(d, []) for d in by_doc}, owners, base, set(by_doc))
     return Answered(
-        header=None if any(c.doc.source_tier == 1 for c in cited) else rules.standard_template_header.format(title=cited[0].doc.title),
+        header=None if any(c.doc.source_tier == 1 for c in cited) else (  # 공식 사규를 인용하지 않음: 첫 문서 종류에 맞는 문구
+            rules.benchmark_reference_header if cited[0].doc.doc_type == "benchmark_reference" else rules.standard_template_header
+        ).format(title=cited[0].doc.title),
         answer=[Sentence(text=t, citations=[evidence[i].chunk_id for i in idx]) for t, idx in kept],
         evidence=[Evidence(**dataclasses.asdict(c.doc), chunk_id=c.chunk_id, section_path=c.section_path, text=c.content,
                            dept_name=departments.get(c.doc.dept_owner, c.doc.dept_owner),

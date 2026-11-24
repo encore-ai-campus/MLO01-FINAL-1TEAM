@@ -43,6 +43,7 @@ class Evidence(BaseModel):
     section_path: str
     clause_label: str  # 화면 표시용 [문서명 제N조]
     text: str          # 조항 전문(chunks.content)
+    doc_type: str      # 사규·표준 양식·외부 참고 사례를 가르는 기준(source_tier 로는 표준 양식과 외부 사례를 못 가름)
     source_tier: int
     source_badge: Literal["official"] | None
     version_id: UUID
@@ -65,6 +66,7 @@ class Excerpt(BaseModel):
     chunk_id: str
     doc_id: str
     title: str
+    doc_type: str
     section_path: str
     text: str
     effective_from: date
