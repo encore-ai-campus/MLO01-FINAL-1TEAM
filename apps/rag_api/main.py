@@ -1,12 +1,13 @@
 """API 앱(검색 API 계획 3.1). 띄우기: `uvicorn rag_api.main:app` (apps/ 를 import 경로에).
 
 시작할 때 한 번 준비해 `app.state` 에 둡니다: 설정, 규칙 문구(rules.yaml), DB 풀, 온톨로지 사전, 부서 표,
-임베딩 클라이언트(한 번 미리 부름), KnowledgeEngine,
-답변 LLM 클라이언트(LLM_BASE_URL 이 비면 None).
+qa 부서 정보, 검색 통계(뒤에서 주기 갱신), 임베딩 클라이언트(한 번 미리 부름), KnowledgeEngine,
+답변 LLM 클라이언트(LLM_BASE_URL 이 비면 None, qa 가 대체 응답).
 인증은 이 앱에 없습니다: 모든 요청이 비로그인이고, 인증 모듈이 `dependency_overrides` 로 요청자 정보를 바꿔 끼웁니다(auth/context.py).
 백엔드가 내는 4xx·5xx 는 모두 `{"error": {"code", "message", "trace_id"}}` 입니다(약속서 00 4절).
 """
 import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,7 @@ from starlette.exceptions import HTTPException
 
 from rag_api.adapters.rest.routes import router
 from rag_api.contracts.common import ApiError, trace_id
+from rag_api.knowledge_engine import term_stats
 from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.rules import values as rules
 from rag_api.settings import departments, ontology
@@ -43,6 +45,17 @@ def _warm_up(cfg: Config) -> None:
         log.warning("임베딩 미리 부르기 실패, 그대로 시작: %s: %s", type(e).__name__, e)
 
 
+async def _refresh_term_stats(pool, every_s: float) -> None:
+    """검색 통계를 TERM_STATS_REFRESH_S 마다 다시 읽음(qa 계획 3.3). 요청마다 읽지 않음. 실패해도 다음 주기에."""
+    while True:
+        await asyncio.sleep(every_s)
+        try:
+            async with pool.acquire() as conn:
+                await term_stats.refresh(conn)
+        except Exception as e:
+            log.warning("검색 통계 갱신 실패, 다음 주기에 다시: %s: %s", type(e).__name__, e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = Config.from_env()
@@ -51,12 +64,13 @@ async def lifespan(app: FastAPI):
     # DB 의 시간대 없는 TIMESTAMP 는 한국 시각(경계 계약 v0.28 1.1). 설치의 DB 기본 시간대 설정이 빠져도 같게 연결에도 정함
     pool = await asyncpg.create_pool(cfg.database_url, min_size=cfg.db_pool_size, max_size=cfg.db_pool_size,
                                      timeout=cfg.db_connect_timeout_s, server_settings={"timezone": "Asia/Seoul"})
-    llm = None
+    refresher = llm = None
     try:
         async with pool.acquire() as conn:
             # ponytail: 사전은 시작 때 한 번. 주기 다시 읽기(settings.ontology)는 사전 관리 기능을 만들 때
             await ontology.reload_if_changed(conn)
-            dept_names, _ = await departments.load(conn, pack)
+            dept_names, app.state.qa_departments = await departments.load(conn, pack)
+            await term_stats.refresh(conn)
         if cfg.vector_channel_enabled:
             await asyncio.to_thread(_warm_up, cfg)
         embedder = OpenAIEmbeddingClient(cfg.embed_base_url, cfg.embed_model, cfg.embed_timeout_s, cfg.embed_api_key)
@@ -64,8 +78,13 @@ async def lifespan(app: FastAPI):
         app.state.engine = KnowledgeEngine(pool, embedder, cfg)
         # ponytail: 첫 호출의 모델 올리기(개발 약 6초)를 미리 하지 않음. 첫 답변이 시간 초과로 나오면 임베딩처럼 미리 부름
         app.state.llm = llm = LLMClient(cfg) if cfg.llm_base_url else None
+        refresher = asyncio.create_task(_refresh_term_stats(pool, cfg.term_stats_refresh_s))
         yield
     finally:
+        if refresher:
+            refresher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await refresher
         if llm:
             await llm.close()
         await pool.close()

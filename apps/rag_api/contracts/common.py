@@ -1,4 +1,4 @@
-"""공통 응답·오류 모양(약속서 00 3·4절)과 기능이 같이 쓰는 카드·배지."""
+"""공통 응답·오류 모양(약속서 00 3·4절)과 검색·답변이 같이 쓰는 카드·배지."""
 import uuid
 from datetime import date, timedelta, timezone
 from typing import Annotated, Literal

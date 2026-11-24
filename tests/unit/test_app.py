@@ -5,19 +5,24 @@ import dataclasses
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import asyncpg
 import pytest
-from asgi_client import request
+from asgi_client import post, request
 from fastapi import Request
 from test_rules import rules_file
 
 from rag_api import main
 from rag_api.auth import context
 from rag_api.auth.context import AuthContext
+from rag_api.contracts.common import ApiError
 from rag_api.main import create_app
 from rag_api.settings import departments
 from rag_api.shared.config import Config
+
+NOW = datetime.now(UTC)
+
 
 @pytest.fixture
 def app():
@@ -32,7 +37,12 @@ def get_context(app, headers: dict) -> AuthContext:
     return asyncio.run(context.get_auth_context(Request(scope)))
 
 
-# --- 기본 요청자(인증 경계 2절) ------------------------------------------------------------------
+def user(status="ACTIVE", role="EMPLOYEE", principal="user") -> AuthContext:
+    return AuthContext(principal_type=principal, user_id=uuid.UUID(int=1) if principal == "user" else None, status=status if principal == "user" else None,
+                       dept_code="FIN", role=role if principal == "user" else None, active_pack="it_service", snapshot_at=NOW)
+
+
+# --- 기본 요청자와 require_active(인증 경계 2절) ------------------------------------------------------------------
 
 def test_default_requester_is_always_anonymous(app):
     """인증 모듈이 없으면 어떤 헤더가 와도 비로그인: 정보가 없을 때 더 많이 보이는 일은 없음(인증 경계 1절 조건 2). 요청자 정보는
@@ -43,6 +53,36 @@ def test_default_requester_is_always_anonymous(app):
         ctx = get_context(app, headers)
         assert (ctx.principal_type, ctx.user_id, ctx.status, ctx.dept_code, ctx.extra_depts, ctx.role, ctx.active_pack) == (
             "anonymous", None, None, None, [], None, "it_service"), headers
+
+
+@pytest.mark.parametrize("ctx, code", [
+    (user(principal="anonymous"), "UNAUTHENTICATED"), (user(principal="system"), "UNAUTHENTICATED"),
+    (user("PENDING"), "ACCOUNT_PENDING"), (user("REVISION_REQ"), "ACCOUNT_PENDING"), (user("REJECTED"), "ACCOUNT_REJECTED")])
+def test_require_active_rejects_everything_but_active_users(ctx, code):
+    with pytest.raises(ApiError) as e:
+        asyncio.run(context.require_active(ctx))
+    assert (e.value.http_status, e.value.code) == ((401 if code == "UNAUTHENTICATED" else 403), code)
+
+
+@pytest.mark.parametrize("role", ["ADMIN", "DEPT_MANAGER", "EMPLOYEE", "NEW_HIRE"])
+def test_require_active_passes_active_users_of_any_role(role):
+    ctx = user(role=role)
+    assert asyncio.run(context.require_active(ctx)) is ctx
+
+
+def test_qa_route_is_401_without_an_auth_module_and_checks_before_the_body(app):
+    """인증 모듈이 없으면 AI 답변은 401(WWW-Authenticate 포함). 본문이 틀려도 계정 확인이 먼저(의존성)."""
+    for body in ({"question": "정산"}, {"nothing": 1}, {}):
+        r = post(app, "/api/v1/qa/answers", body, headers={"Authorization": "Bearer abc"})
+        assert (r.status_code, r.json()["error"]["code"], r.headers["www-authenticate"]) == (401, "UNAUTHENTICATED", "Bearer"), body
+
+
+@pytest.mark.parametrize("status, code", [("PENDING", "ACCOUNT_PENDING"), ("REVISION_REQ", "ACCOUNT_PENDING"), ("REJECTED", "ACCOUNT_REJECTED")])
+def test_override_replaces_the_requester_and_require_active_follows_it(app, status, code):
+    """인증 모듈은 get_auth_context 만 바꿔 끼움: 본체의 require_active 가 그 결과를 따라 403(본문이 틀려도 먼저)."""
+    app.dependency_overrides[context.get_auth_context] = lambda: user(status)
+    r = post(app, "/api/v1/qa/answers", {"nothing": 1})
+    assert (r.status_code, r.json()["error"]["code"]) == (403, code) and "www-authenticate" not in r.headers
 
 
 def test_body_app_has_no_auth_routes_or_overrides(app):
@@ -75,6 +115,12 @@ def test_error_bodies(app, caplog):
 def test_405_has_allow_header(app):
     r = request(app, "PUT", "/api/v1/search/documents")
     assert (r.status_code, r.headers["allow"], r.json()["error"]["code"]) == (405, "POST", "VALIDATION_FAILED")
+
+
+def test_every_401_has_www_authenticate_and_other_errors_do_not(app):
+    assert request(app, "POST", "/api/v1/qa/answers", json={}).headers["www-authenticate"] == "Bearer"
+    for r in (request(app, "GET", "/api/v1/nowhere"), request(app, "POST", "/api/v1/search/documents", json={})):
+        assert "www-authenticate" not in r.headers
 
 
 @pytest.mark.parametrize("exc, status", [
@@ -111,6 +157,18 @@ def test_unhandled_db_error_logs_only_class_sqlstate_constraint(app, caplog):
     assert [x.getMessage() for x in caplog.records if x.name == "rag_api.main"] == [
         f"처리하지 못한 DB 오류 trace_id={r.json()['error']['trace_id']} UniqueViolationError sqlstate=23505 constraint=users_email_key"]
     assert "secret" not in caplog.text and "$2b$" not in caplog.text and all(x.exc_info is None for x in caplog.records)
+
+
+def test_body_limit_is_64kib_before_anything_else(app):
+    """64KiB 넘는 본문은 받는 도중에 끊음(요청자 확인보다 먼저): Content-Length 가 있든 없든(청크)."""
+    limit = 64 * 1024
+    big = b'{"query": "' + b"a" * limit + b'"}'
+    assert request(app, "POST", "/api/v1/qa/answers", content=big, headers={"content-type": "application/json"}).status_code == 413
+
+    async def chunks():
+        for i in range(0, len(big), 8192):
+            yield big[i:i + 8192]
+    assert request(app, "POST", "/api/v1/qa/answers", content=chunks(), headers={"content-type": "application/json"}).status_code == 413
 
 
 # --- 앱 시작 ------------------------------------------------------------------------------------------------------
@@ -153,6 +211,7 @@ def startup_runner(monkeypatch, create_app):
     monkeypatch.setattr(main.asyncpg, "create_pool", create_pool)
     monkeypatch.setattr(main.ontology, "reload_if_changed", no_op)
     monkeypatch.setattr(main.departments, "load", no_depts)
+    monkeypatch.setattr(main.term_stats, "refresh", no_op)
     monkeypatch.setattr(main, "LLMClient", FakeLLM)
     for f in dataclasses.fields(Config):
         monkeypatch.delenv(f.name.upper(), raising=False)
@@ -213,6 +272,37 @@ def test_llm_client_from_settings_closed_at_end(startup):
     app = startup()
     assert app.state.llm.cfg.llm_base_url == "http://unused.invalid/v1" and app.state.llm.closed  # 앱이 끝날 때 닫음
     assert startup(LLM_BASE_URL=None, LLM_MODEL=None).state.llm is None  # 주소가 비면 LLM 없이(qa 가 대체 응답)
+
+
+def test_lifespan_runs_and_stops_term_stats_refresh(startup):
+    app = startup()
+    assert app.state.running_tasks == ["_refresh_term_stats"]  # 앱이 도는 동안 갱신 작업 하나
+    assert app.state.leftover_tasks == []  # 앱이 끝날 때 취소하고 끝날 때까지 기다림
+
+
+def test_term_stats_refresh_loop_survives_error(monkeypatch, caplog):
+    calls = []
+
+    async def refresh(conn):
+        calls.append(conn)
+        if len(calls) == 1:
+            raise OSError("DB 없음")
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            yield None
+
+    async def go():
+        task = asyncio.create_task(main._refresh_term_stats(Pool(), 0.01))
+        while len(calls) < 2:  # 한 번 실패해도 다음 주기에 다시(못 하면 wait_for 시간 초과)
+            await asyncio.sleep(0.005)
+        task.cancel()
+
+    monkeypatch.setattr(main.term_stats, "refresh", refresh)
+    with caplog.at_level(logging.WARNING, logger="rag_api.main"):
+        asyncio.run(asyncio.wait_for(go(), 2))
+    assert [r.getMessage() for r in caplog.records][:1] == ["검색 통계 갱신 실패, 다음 주기에 다시: OSError: DB 없음"]
 
 
 def test_active_pack():
