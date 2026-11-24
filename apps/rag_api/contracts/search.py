@@ -56,7 +56,8 @@ class SearchResponse(BaseModel):
     total: int
     active_pack: str
     documents: list[DocumentHit]
-    reference_templates: list[DocumentHit]
+    reference_templates: list[DocumentHit]  # 공공 표준 양식(standard_template)
+    reference_cases: list[DocumentHit]      # 외부 참고 사례(benchmark_reference). include_benchmark 일 때만 채워짐
     term_cards: list[TermCard]
     concepts: list[ConceptChip]
     notices: list[DiscoverableNotice]

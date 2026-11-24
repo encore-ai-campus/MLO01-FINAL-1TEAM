@@ -55,6 +55,25 @@ def test_no_document_outside_acl_per_requester(api):
     api(run)
 
 
+def test_benchmark_reference_is_listed_as_a_reference_only_when_asked(api):
+    """T-BENCH(외부 참고 사례, benchmark 팩, PUBLIC): include_benchmark 일 때만 나오고, documents·total·reference_templates 가 아니라 reference_cases 로."""
+    async def run(client, conn):
+        q = "공공기관 출장비 정산 기준 참고 자료"
+        off = (await search(client, None, query=q)).json()
+        on = (await search(client, None, query=q, include_benchmark=True)).json()
+        only = (await search(client, None, query=q, include_benchmark=True, doc_types=["official_policy"])).json()
+        ids = lambda r, key: {d["doc_id"] for d in r[key]}  # noqa: E731
+        assert off["reference_cases"] == [] and "T-BENCH" not in ids(off, "documents") | ids(off, "reference_templates")  # 요청하지 않으면 어디에도 없음
+        assert ids(on, "reference_cases") == {"T-BENCH"} and {d["doc_type"] for d in on["reference_cases"]} == {"benchmark_reference"}
+        assert "T-BENCH" not in ids(on, "documents") | ids(on, "reference_templates")
+        assert ids(on, "documents") == ids(off, "documents") and on["total"] == off["total"] == len(ids(off, "documents"))
+        assert on["reference_templates"] == off["reference_templates"]  # 켜도 표준 양식 목록은 그대로
+        assert {d["doc_type"] for d in on["reference_templates"]} <= {"standard_template"}
+        assert ids(only, "reference_cases") == {"T-BENCH"}  # 유형을 사규로 좁혀도 참고 목록들은 따로 옴
+        assert {d["doc_type"] for d in only["documents"]} == {"official_policy"} and "T-BENCH" not in ids(only, "documents")
+    api(run)
+
+
 @pytest.mark.parametrize("who, dept_filter, query, notices", [
     ("fin", ["HR"], "인사 규정", ["T-HR"]),       # ACTIVE 비ADMIN·0건 → 볼 수 없는 존재 공개 문서
     ("hr", ["FIN"], "재무 규정", ["T-FIN"]),

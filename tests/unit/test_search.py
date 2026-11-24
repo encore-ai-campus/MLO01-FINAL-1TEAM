@@ -29,7 +29,7 @@ HR_USER = AuthContext(principal_type="user", user_id=uuid.UUID(int=1), status="A
 
 
 def chunk(doc_id, n, doc_type="official_policy", effective=date(2026, 1, 1), content=None, dept="FIN"):
-    meta = DocMeta(doc_id, f"{doc_id} 제목", "v1.0", doc_type, 2 if doc_type == "standard_template" else 1, dept,
+    meta = DocMeta(doc_id, f"{doc_id} 제목", "v1.0", doc_type, 2 if doc_type in ("standard_template", "benchmark_reference") else 1, dept,
                    effective, uuid.uuid5(uuid.NAMESPACE_URL, doc_id))
     return RetrievedChunk(f"{doc_id}::v1.0::c{n:03d}", f"제{n}조", content or f"{doc_id} 본문 {n}", [], meta,
                           bm25=3.2, cosine=0.8, rrf=0.03, final=0.036)
@@ -103,9 +103,36 @@ def test_templates_separate_max_5_and_not_counted():
     assert [d.doc_id for d in r.documents] == ["A", "B"] and r.total == 2
 
 
+def test_benchmark_references_go_to_their_own_list_with_their_own_cap_so_templates_are_not_pushed_out():
+    """외부 참고 사례(benchmark_reference)는 documents·total·reference_templates 에 섞이지 않고 reference_cases 로, 순위대로 따로 상한(5)까지."""
+    cases = [chunk(f"BM-{i}", 1, "benchmark_reference") for i in range(7)]
+    chunks = [chunk("A", 1), *cases[:6], chunk("STD-0", 1, "standard_template"), chunk("B", 1), chunk("STD-1", 1, "standard_template"),
+              cases[6]]  # 외부 사례가 양식보다 앞서 많이 있어도
+    r = search(FakeEngine(chunks), include_benchmark=True)
+    assert [d.doc_id for d in r.documents] == ["A", "B"] and r.total == 2
+    assert [t.doc_id for t in r.reference_templates] == ["STD-0", "STD-1"]  # 양식은 밀리지 않음
+    assert [t.doc_id for t in r.reference_cases] == [f"BM-{i}" for i in range(5)]  # 사례는 순위대로 5건까지(BM-5·6 은 상한 밖)
+    assert {t.doc_type for t in r.reference_templates} == {"standard_template"} and {t.doc_type for t in r.reference_cases} == {"benchmark_reference"}
+
+
+def test_without_benchmark_the_response_is_the_same_and_reference_cases_is_empty():
+    chunks = [chunk("A", 1), chunk("STD-0", 1, "standard_template"), chunk("B", 1)]
+    r = search(FakeEngine(chunks))  # include_benchmark 기본 false: 엔진은 외부 사례를 주지 않음
+    assert (r.reference_cases, [d.doc_id for d in r.reference_templates], [d.doc_id for d in r.documents]) == ([], ["STD-0"], ["A", "B"])
+
+
+def test_benchmark_references_do_not_shift_pages_or_totals():
+    chunks = [chunk(f"D{i:02d}", 1) for i in range(12)] + [chunk("BM", 1, "benchmark_reference")]
+    p1 = search(FakeEngine(chunks), limit=10, include_benchmark=True)
+    p2 = search(FakeEngine(chunks), limit=10, include_benchmark=True, cursor=p1.next_cursor)
+    assert (p1.total, len(p1.documents), p1.next_cursor, [d.doc_id for d in p1.reference_templates]) == (12, 10, "10", [])
+    assert [d.doc_id for d in p1.reference_cases] == ["BM"]
+    assert ([d.doc_id for d in p2.documents], p2.next_cursor, p2.reference_templates, p2.reference_cases) == (["D10", "D11"], None, [], [])  # 둘째 쪽엔 없음
+
+
 @pytest.mark.parametrize("doc_types, sent", [
-    ([], ()), (["official_policy"], ("official_policy", "standard_template")),
-    (["standard_template", "ojt_guide"], ("standard_template", "ojt_guide"))])
+    ([], ()), (["official_policy"], ("official_policy", "standard_template", "benchmark_reference")),
+    (["standard_template", "ojt_guide"], ("standard_template", "ojt_guide", "benchmark_reference"))])
 def test_doc_types_always_include_templates(doc_types, sent):
     engine = FakeEngine([])
     search(engine, doc_types=doc_types, dept_filter=["FIN"], include_benchmark=True)
@@ -122,7 +149,7 @@ def test_cursor_pages():
     assert p1.reference_templates and p1.term_cards and p1.concepts and p1.next_cursor
     p2 = search(engine, query="정산", limit=10, cursor=p1.next_cursor)
     assert [d.doc_id for d in p2.documents] == [f"D{i:02d}" for i in range(10, 20)] and p2.total == 25
-    assert (p2.reference_templates, p2.term_cards, p2.concepts, p2.notices) == ([], [], [], [])  # 첫 쪽에만
+    assert (p2.reference_templates, p2.reference_cases, p2.term_cards, p2.concepts, p2.notices) == ([], [], [], [], [])  # 첫 쪽에만
     p3 = search(engine, query="정산", limit=10, cursor=p2.next_cursor)
     assert [d.doc_id for d in p3.documents] == [f"D{i:02d}" for i in range(20, 25)] and p3.next_cursor is None
     assert len(engine.queries) == 3  # 쪽마다 다시 찾음
@@ -199,7 +226,7 @@ SEARCH = "/api/v1/search/documents"
 def test_route_anonymous_and_response_shape(app):
     r = post(app, SEARCH, {"query": "정산 기준"})
     body = r.json()
-    assert r.status_code == 200 and list(body) == ["total", "active_pack", "documents", "reference_templates", "term_cards",
+    assert r.status_code == 200 and list(body) == ["total", "active_pack", "documents", "reference_templates", "reference_cases", "term_cards",
                                                    "concepts", "notices", "next_cursor", "status", "trace_id"]
     assert body["trace_id"].startswith("srch-") and body["documents"][0]["doc_id"] == "A"
     assert post(app, SEARCH, {"query": "정산", "pack": "ecommerce"}).json()["active_pack"] == "it_service"  # 팩은 요청으로 받지 않음

@@ -15,7 +15,7 @@ from rag_api.rules.values import Rules
 from rag_api.settings import ontology
 from rag_api.shared.tokenize import _normalize
 
-TEMPLATE = "standard_template"
+TEMPLATE, CASE = "standard_template", "benchmark_reference"  # 사규가 아닌 참고 자료: documents·total 이 아니라 따로(reference_templates·reference_cases)
 
 
 def _decode_cursor(cursor: str | None) -> int:
@@ -61,13 +61,14 @@ async def search_documents(engine: KnowledgeEngine, departments: dict[str, str],
     cfg = engine.cfg
     offset = _decode_cursor(req.cursor)
     first = offset == 0
-    # 표준 양식은 doc_types 와 관계없이 reference_templates 로 따로 오므로 유형 필터에 늘 더함
-    doc_types = tuple(dict.fromkeys([*req.doc_types, TEMPLATE])) if req.doc_types else ()
+    # 표준 양식·외부 참고 사례는 doc_types 와 관계없이 따로 오므로 유형 필터에 늘 더함
+    # (외부 참고 사례는 include_benchmark 가 아니면 팩 조건에서 걸러져 결과가 늘지 않음)
+    doc_types = tuple(dict.fromkeys([*req.doc_types, TEMPLATE, CASE])) if req.doc_types else ()
     # ponytail: 쪽마다 다시 찾음. 결과 상위 N(RESULT_TOP_N) 이 그대로라 순서가 같음. 상위 N 밖으로는 쪽을 넘기지 못함
     res = await engine.retrieve(RetrievalQuery(req.query, "hybrid", tuple(req.dept_filter), doc_types,
                                                req.include_benchmark), ctx)
     hits = group(res.chunks, departments, cfg.snippets_per_doc, cfg.snippet_chars, today or datetime.now(KST).date())
-    documents = [h for h in hits if h.doc_type != TEMPLATE]
+    documents = [h for h in hits if h.doc_type not in (TEMPLATE, CASE)]
     # 존재 공개 안내는 결과 건수와 관계없이 첫 쪽에(7차 회신 2.3절). 대상 판정(ACTIVE 비ADMIN)·볼 수 없는 문서만은 엔진이 함
     notices = discoverable_notices(await engine.discoverable_hints(req.query, ctx), departments,
                                    rules.cooperation_request) if first else []
@@ -75,6 +76,7 @@ async def search_documents(engine: KnowledgeEngine, departments: dict[str, str],
     return SearchResponse(
         total=len(documents), active_pack=ctx.active_pack, documents=documents[offset:end],
         reference_templates=[h for h in hits if h.doc_type == TEMPLATE][:cfg.reference_templates_max] if first else [],
+        reference_cases=[h for h in hits if h.doc_type == CASE][:cfg.reference_templates_max] if first and req.include_benchmark else [],  # ponytail: 상한은 양식과 같은 설정을 같이 씀(따로 필요하면 설정을 나눔)
         term_cards=term_cards(req.query, ctx, active_packs(ctx, req.include_benchmark)) if first else [],
         concepts=[ConceptChip(concept_id=c.concept_id, canonical_term=c.canonical_term)
                   for c in res.matched_concepts] if first else [],
