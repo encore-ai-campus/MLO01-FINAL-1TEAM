@@ -22,6 +22,12 @@
   #question-desk-home button { color:var(--ink); cursor:pointer; }
   #question-desk-home .desk-modes button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:42px; padding:5px 4px; border:1px solid transparent; border-radius:7px; background:transparent; font-size:13px; font-weight:700; white-space:nowrap; }
   #question-desk-home .desk-mode-icon { display:block; width:16px; height:16px; flex:none; }
+  @media (min-width:691px) {
+    #question-desk-home .desk-modes { grid-area:1 / 1; }
+    #question-desk-home :is(#desk-ask-panel,#desk-search-panel) { grid-area:2 / 1; align-self:start; min-width:0; }
+    /* Keep both panels in the same grid cell so its height follows the taller form. */
+    #question-desk-home :is(#desk-ask-panel,#desk-search-panel)[hidden] { display:block !important; visibility:hidden; }
+  }
   #question-desk-home .desk-modes button[aria-pressed="true"] { background:var(--coral); }
   #question-desk-home .desk-form label:first-child { display:block; margin-block-end:6px; font-size:14px; font-weight:800; }
   #question-desk-home .desk-field { display:flex; align-items:stretch; gap:5px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--sheet); }
