@@ -92,15 +92,20 @@ def _inert(text: str) -> str:
     return SECTION.sub("[ ", TAG.sub(r"<\1 ", text))
 
 
+def _line(text: str) -> str:
+    """시스템 프롬프트의 한 줄에 들어갈 글: `_inert` 에 줄바꿈 등 공백 문자를 한 칸으로 접어 지시 줄이 새로 생기지 않게."""
+    return " ".join(_inert(text).split())
+
+
 def messages(evidence: list[RetrievedChunk], question: str, instructions: list[str]) -> list[dict]:
     """근거는 번호(E1…)와 구분자 안에(긴 chunk_id 를 작은 모델이 잘못 베끼지 않게, 원문이 지시와 섞이지 않게),
-    공식 사규·표준 양식 구역 표시 아래에(select_evidence 순서). 질문은 <question> 안에. 넣는 글(원문·제목·조항 경로·질문)은
+    공식 사규·표준 양식 구역 표시 아래에(select_evidence 순서). 질문은 <question> 안에. 넣는 글(원문·제목·조항 경로·문서 번호·질문)은
     구분자를 무력화. 앞 질문은 넘기지 않음(5-14). 메인기획 지시(R1 주·보조, R2 병기)는 시스템 프롬프트 뒤에."""
     lines, section = [], None
     for i, c in enumerate(evidence, 1):
         if (label := PRIMARY if c.doc.source_tier == 1 else SECONDARY) != section:
             lines.append(section := label)
-        lines.append(f'<evidence id="E{i}">\n문서: {_inert(c.doc.title)} ({c.doc.doc_id})\n조항: {_inert(c.section_path)}\n'
+        lines.append(f'<evidence id="E{i}">\n문서: {_inert(c.doc.title)} ({_inert(c.doc.doc_id)})\n조항: {_inert(c.section_path)}\n'
                      f'{_inert(c.content)}\n</evidence>')
     blocks = "\n".join(lines)
     system = "\n".join([SYSTEM_PROMPT, *(f"- {t}" for t in instructions)])
@@ -217,7 +222,7 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
         if pair <= set(owners):  # 쌍의 두 문서가 모두 근거에 있을 때만 병기 지시. 상대를 더 불러오지 않음
             # ponytail: 상대 조항이 근거에 없어 병기가 빠지는 문항이 나오면 상대 청크를 근거에 더함
             a, b = sorted(pair, key=lambda d: owners[d] != "COMMON")  # 전사 공통 쪽이 a
-            instructions.append(rules.conflict_instruction.format(a=titles[a], b=titles[b], priority_rule=c["priority_rule"]))
+            instructions.append(rules.conflict_instruction.format(a=_line(titles[a]), b=_line(titles[b]), priority_rule=_line(c["priority_rule"])))
 
     try:
         out = await llm.parse(messages(evidence, req.question, instructions), LLMAnswer)
