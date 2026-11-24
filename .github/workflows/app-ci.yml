@@ -1,0 +1,46 @@
+name: APP CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'apps/rag_api/**'
+      - 'infra/app/**'
+      - 'requirements.txt'
+      - '.github/workflows/app-ci.yml'
+
+  push:
+    branches: [dev]
+    paths:
+      - 'apps/rag_api/**'
+      - 'infra/app/**'
+      - 'requirements.txt'
+      - '.github/workflows/app-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate Compose
+        run: |
+          cp infra/app/.env.example infra/app/.env
+          docker compose -f infra/app/compose.yml config --quiet
+
+      - name: Build API image
+        run: |
+          docker build \
+            -f infra/app/Dockerfile \
+            -t rag-api:ci .
+
+      - name: Verify API import
+        run: |
+          docker run --rm --network none \
+            rag-api:ci \
+            python -c "from rag_api.main import app; print(app.title)"
