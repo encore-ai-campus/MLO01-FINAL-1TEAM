@@ -17,9 +17,9 @@ from rag_api.shared.config import Config
 from rag_api.shared.tokenize import ConceptTerm, load_dictionary
 
 CONCEPTS = (
-    Concept("CON-FIN-001", "지출결의서", ("지결", "비용정산"), ("IT-FIN-008", "STD-FIN-022"), "설명", "base"),
-    Concept("CON-ENG-001", "운영 배포 승인", ("릴리즈승인",), ("IT-ENG-020",), "설명", "it_service"),
-    Concept("CON-ECO-001", "반품 처리", ("환불처리",), ("EC-001",), "설명", "ecommerce"),
+    Concept("CON-XX-901", "지출결의서", ("지결", "비용정산"), ("XX-FIN-901", "XX-FIN-902"), "설명", "base"),
+    Concept("CON-XX-902", "운영 배포 승인", ("릴리즈승인",), ("XX-ENG-901",), "설명", "it_service"),
+    Concept("CON-XX-921", "반품 처리", ("환불처리",), ("EC-001",), "설명", "ecommerce"),
 )
 HR = AuthContext(principal_type="user", status="ACTIVE", dept_code="HR", role="EMPLOYEE", active_pack="it_service",
                  snapshot_at=datetime(2026, 11, 21))
@@ -83,22 +83,22 @@ def test_fuse_tie_survives_float_sum_order():
 
 def test_expand_off_matches_concept_only():
     matched, kw, related = expand(["지결", "때"], list(CONCEPTS), "v1.0:3", False, 20)
-    assert [c.concept_id for c in matched] == ["CON-FIN-001"]
+    assert [c.concept_id for c in matched] == ["CON-XX-901"]
     assert kw == [KeywordToken("지결", "query"), KeywordToken("때", "query")] and related == []
 
 
 def test_expand_on_adds_synonyms_with_source_and_cap():
     _, kw, related = expand(["지결", "때"], list(CONCEPTS), "v1.0:3", True, 20)
-    assert kw[2:] == [KeywordToken("지출결의서", "canonical", "CON-FIN-001"),
-                      KeywordToken("비용정산", "synonym", "CON-FIN-001")]  # 지결은 이미 질의에 있음
-    assert related == ["IT-FIN-008", "STD-FIN-022"]
+    assert kw[2:] == [KeywordToken("지출결의서", "canonical", "CON-XX-901"),
+                      KeywordToken("비용정산", "synonym", "CON-XX-901")]  # 지결은 이미 질의에 있음
+    assert related == ["XX-FIN-901", "XX-FIN-902"]
     _, kw, _ = expand(["지결"], list(CONCEPTS), "v1.0:3", True, 1)
     assert [t.token for t in kw] == ["지결", "지출결의서"]
 
 
 def test_spaced_term_concept_matches():
     matched, _, _ = expand(["운영배포승인", "절차"], list(CONCEPTS), "v1.0:3", False, 20)
-    assert [c.concept_id for c in matched] == ["CON-ENG-001"]
+    assert [c.concept_id for c in matched] == ["CON-XX-902"]
 
 
 class FakeChannels:
@@ -149,7 +149,7 @@ def test_retrieve_hybrid(monkeypatch):
     assert where.args[-2:] == (["FIN"], ["official_policy"])
     assert ch.calls["vector"][0] == where  # 두 채널이 같은 조건
     assert [c.chunk_id for c in res.chunks] == ["A", "B"] and not res.status.degraded
-    assert [c.concept_id for c in res.matched_concepts] == ["CON-FIN-001"]
+    assert [c.concept_id for c in res.matched_concepts] == ["CON-XX-901"]
     assert (res.trace.keyword_hits, res.trace.vector_hits, res.trace.dict_version) == (1, 1, "v1.0")
     assert "representative" not in ch.calls  # 확장 꺼짐
 
@@ -184,13 +184,13 @@ def test_vector_top1_cosine_kept_outside_results(monkeypatch):
 
 
 def test_retrieve_expansion_on_adds_related_docs(monkeypatch):
-    ch = FakeChannels(monkeypatch, [row("A", doc_id="IT-FIN-008", bm25=1.0)], [],
-                      [row("R", doc_id="STD-FIN-022", bm25=0.0)])
+    ch = FakeChannels(monkeypatch, [row("A", doc_id="XX-FIN-901", bm25=1.0)], [],
+                      [row("R", doc_id="XX-FIN-902", bm25=0.0)])
     res = run(KnowledgeEngine(None, Embedder(), cfg(ontology_expansion_enabled=True)),
               RetrievalQuery("지결 환불처리 기한"))  # 환불처리는 ecommerce 팩 개념이라 활성 팩(it_service)에서 안 맞음
     assert ch.calls["keyword"][1][0] == "지결 환불처리 기한 지출결의서 비용정산"
-    assert ch.calls["representative"][1] == (["STD-FIN-022"], ch.calls["keyword"][1][0])  # 이미 찾은 문서는 뺌
-    assert [c.concept_id for c in res.matched_concepts] == ["CON-FIN-001"]
+    assert ch.calls["representative"][1] == (["XX-FIN-902"], ch.calls["keyword"][1][0])  # 이미 찾은 문서는 뺌
+    assert [c.concept_id for c in res.matched_concepts] == ["CON-XX-901"]
     assert not hasattr(res.matched_concepts[0], "related_doc_ids")  # 권한 밖 문서 ID 를 결과에 싣지 않음
     r = next(c for c in res.chunks if c.chunk_id == "R")
     assert r.keyword_rank == 2  # 키워드 목록 끝에 붙음
@@ -206,7 +206,7 @@ def test_title_tokens_retokenized_when_fingerprint_changes(monkeypatch):
     FakeChannels(monkeypatch, discoverable=[{"doc_id": "K", "title": title, "dept_name": "인프라", "dept_owner": "INF"}])
     hints = lambda: [h.doc_id for h in asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).discoverable_hints("협조전", HR))]
     assert hints() == ["K"]  # 질의·제목 모두 협조·전
-    use_dictionary(CONCEPTS + (Concept("CON-COM-002", "협조전", ("업무협조전",), (), "설명", "base"),), "v1.0:4")
+    use_dictionary(CONCEPTS + (Concept("CON-XX-904", "협조전", ("업무협조전",), (), "설명", "base"),), "v1.0:4")
     assert hints() == ["K"]  # 질의가 협조전 한 토큰. 제목도 다시 잘라야 맞음
 
 

@@ -215,7 +215,7 @@ def test_procedure_graph_drops_invisible_keeps_retired(with_pool, who):
     if who == "admin":
         assert steps(by_src["T-ALL"], "prev_steps") == [("T-PUB", True), ("T-HR", True)]
         assert steps(by_src["T-ALL"], "next_steps") == [("T-FIN", True), ("T-BADPTR", False), ("T-PENDING", False)]
-        assert "required_form_id" not in by_src["T-ALL"].meta["next_steps"][0]  # STD-FIN-022 는 없는 문서
+        assert "required_form_id" not in by_src["T-ALL"].meta["next_steps"][0]  # XX-FIN-902 는 없는 문서
         assert [c["target_doc_id"] for c in by_src["T-ALL"].meta["conflicts"]] == ["T-LGL", "T-REV"]  # 폐기·검수 대기 빠짐
 
 
