@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from rag_api.adapters.rest.routes import router
+from rag_api.adapters.rest.ui import mount_ui
 from rag_api.contracts.common import ApiError, trace_id
 from rag_api.documents import service as documents
 from rag_api.knowledge_engine import term_stats
@@ -105,6 +106,7 @@ def _error(request: Request, http_status: int, code: str, message: str, headers=
 def create_app() -> FastAPI:
     app = FastAPI(title="rag_api", lifespan=lifespan, max_body_size=MAX_BODY_BYTES)
     app.include_router(router)
+    mount_ui(app)
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError):

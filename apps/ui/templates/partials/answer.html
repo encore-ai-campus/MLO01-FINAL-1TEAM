@@ -1,0 +1,44 @@
+{% import "partials/cards.html" as cards with context %}
+<section class="card" aria-label="AI 답변">
+  <h2>AI 답변</h2>
+  {% if result.result == "answered" %}
+    {% if result.header and not result.evidence|selectattr('source_tier', 'equalto', 1)|list %}
+      <p class="source-banner" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m12 3 10 18H2L12 3Zm0 6v5m0 3h.01"/></svg>{{ result.header }}</p>
+    {% endif %}
+    {% for sentence in result.answer %}
+      <p>{{ sentence.text }}
+        {% for citation in sentence.citations %}
+          {% for evidence in result.evidence if evidence.chunk_id == citation %}
+            {% set evidence_index = result.evidence.index(evidence) + 1 %}
+            <a href="#evidence-{{ evidence_index }}" aria-label="근거 {{ evidence_index }}">[{{ evidence_index }}]</a>
+          {% endfor %}
+        {% endfor %}
+      </p>
+    {% endfor %}
+    {% for evidence in result.evidence %}
+      {% set kind = 'official' if evidence.source_tier == 1 else 'external' %}
+      <article id="evidence-{{ loop.index }}" class="source-card" data-source="{{ 'official' if kind == 'official' else 'template' }}">
+        {{ cards.source_badge(kind) }}
+        <strong>[{{ loop.index }}] {{ evidence.clause_label }}</strong>
+        <p>{{ evidence.text }}</p>
+        {{ cards.document_link(evidence, evidence.chunk_id) }}
+      </article>
+    {% endfor %}
+    {{ cards.conflicts(result.conflict_clauses) }}
+  {% elif result.result == "fallback_excerpts" %}
+    <p class="source-banner" role="status">AI 답변을 제공하기 어려워 확인 가능한 원문 발췌를 보여드려요.</p>
+    {% for excerpt in result.excerpts %}
+      <article class="source-card">
+        <strong>{{ excerpt.title }}</strong><p>{{ excerpt.text }}</p>
+        {{ cards.document_link(excerpt, excerpt.chunk_id) }}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p>{{ result.message }}</p>
+    {% if result.suggested_questions %}
+      <h3>추천 질문</h3>
+      <ul>{% for question in result.suggested_questions %}<li>{{ question }}</li>{% endfor %}</ul>
+    {% endif %}
+  {% endif %}
+  {{ cards.notices(result.notices) }}
+</section>

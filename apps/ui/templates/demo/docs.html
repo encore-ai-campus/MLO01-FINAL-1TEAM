@@ -1,0 +1,100 @@
+<section class="screen" data-screen="docs" hidden><div id="qd-docs" lang="ko">
+  <div class="qd-shell">
+    <div class="desk-content">
+      <section id="qd-search-view" aria-labelledby="qd-search-heading">
+        <div class="qd-search-head">
+          <h1 id="qd-search-heading" tabindex="-1">문서 검색</h1>
+          <form class="qd-search-form">
+            <label class="qd-visually-hidden" for="qd-query">문서 제목 또는 업무 용어</label>
+            <div class="qd-field">
+              <svg class="qd-search-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m14.5 14.5 4 4"/></svg>
+              <input id="qd-query" value="출장비" placeholder="문서 제목 또는 업무 용어">
+              <button class="qd-primary" type="submit">검색</button>
+            </div>
+          </form>
+        </div>
+        <div class="qd-results">
+          <div class="qd-results-bar">
+            <div><h2>검색 결과</h2><p id="qd-count" aria-live="polite"></p></div>
+            <div class="row">
+              <label class="qd-filter"><input id="qd-own" type="checkbox"> 내 부서 문서만 보기</label>
+              <label class="qd-filter"><input id="qd-benchmark" type="checkbox"> 외부 사례 포함</label>
+            </div>
+          </div>
+          <ul class="qd-result-list">
+            <li data-doc-row="expense">
+              <button class="qd-result" type="button" data-doc="expense">
+                <span class="qd-doc-icon"><i data-lucide="file-text" aria-hidden="true">▤</i></span>
+                <span class="qd-result-text">
+                  <span class="qd-result-name">출장비 규정 <span class="qd-status">현행</span></span>
+                  <span class="qd-snippet">제4조 비용 정산 · 정산 신청 시 지출 영수증을 첨부한다.</span>
+                  <span class="qd-meta">사내 규정 · 경영운영팀 · 시행 2026.11.16</span>
+                </span>
+                <span class="qd-result-arrow" aria-hidden="true">→</span>
+              </button>
+            </li>
+            <li data-doc-row="guide">
+              <button class="qd-result" type="button" data-doc="guide">
+                <span class="qd-doc-icon"><i data-lucide="list-checks" aria-hidden="true">☷</i></span>
+                <span class="qd-result-text">
+                  <span class="qd-result-name">출장비 정산 업무 가이드</span>
+                  <span class="qd-snippet">정산 신청서 작성, 증빙 첨부, 결재 요청 순서를 안내한다.</span>
+                  <span class="qd-meta">업무 가이드 · 재무팀 · 시행 2026.11.12</span>
+                </span>
+                <span class="qd-result-arrow" aria-hidden="true">→</span>
+              </button>
+            </li>
+            <li data-doc-row="purchase">
+              <button class="qd-result" type="button" data-doc="purchase">
+                <span class="qd-doc-icon"><i data-lucide="file-text" aria-hidden="true">▤</i></span>
+                <span class="qd-result-text">
+                  <span class="qd-result-name">구매 업무 세칙 <span class="qd-status">현행</span></span>
+                  <span class="qd-snippet">제3조 구매 한도 · 부서 세칙의 구매 한도 기준을 확인한다.</span>
+                  <span class="qd-meta">경영운영팀 · 시행 2026.11.16</span>
+                </span>
+                <span class="qd-result-arrow" aria-hidden="true">→</span>
+              </button>
+            </li>
+          </ul>
+          <p class="qd-empty" hidden>조건에 맞는 문서가 없어요. 다른 검색어를 입력해 보세요.</p>
+          <div id="qd-reference-templates" class="source-stack"></div>
+          <div id="qd-benchmark-results" class="source-stack"></div>
+          <div id="qd-source-notices" class="source-stack"></div>
+          <div id="qd-source-conflicts" class="source-stack"></div>
+        </div>
+      </section>
+      <section id="qd-document-view" aria-labelledby="qd-doc-title" hidden>
+        <div class="qd-doc-head">
+          <button type="button" class="qd-back"><i data-lucide="arrow-left" aria-hidden="true">←</i> 검색 결과</button>
+          <div class="qd-title-row"><h1 id="qd-doc-title" tabindex="-1">출장비 규정</h1><span id="qd-doc-status" class="qd-status">현행</span></div>
+          <p id="qd-doc-meta" class="qd-meta"></p>
+          <label class="qd-version" id="qd-version-picker" hidden>버전 선택
+            <select id="qd-version"><option value="current">현행 · 2026.11.16</option><option value="previous">이전 · 2026.10.01</option></select>
+          </label>
+        </div>
+        <div class="qd-detail-grid">
+          <article class="qd-paper" aria-label="문서 본문">
+            <div class="qd-paper-top"><span><i data-lucide="file-text" aria-hidden="true">▤</i> 원문</span></div>
+            <div class="qd-paper-body">
+              <section><h2 id="qd-prior-title"></h2><p id="qd-prior-text"></p></section>
+              <section id="qd-cite-section" tabindex="-1"><h2 id="qd-clause-title"></h2><p><mark id="qd-excerpt"></mark></p><p id="qd-clause-extra"></p></section>
+              <section><h2 id="qd-next-title"></h2><p id="qd-next-text"></p></section>
+            </div>
+          </article>
+          <aside class="qd-side" aria-label="인용 위치와 관련 문서">
+            <section id="qd-citation-panel" class="qd-reference">
+              <h2>인용 위치</h2>
+              <button type="button" class="qd-jump"><i data-lucide="bookmark" aria-hidden="true">▱</i> <span id="qd-jump-name"></span><span class="qd-jump-arrow" aria-hidden="true">↗</span></button>
+            </section>
+            <section class="qd-related">
+              <h2>함께 볼 문서</h2>
+              <button type="button" data-related="form">출장비 정산 신청서 <span aria-hidden="true">→</span></button>
+              <button type="button" data-related="guide">출장비 정산 업무 가이드 <span aria-hidden="true">→</span></button>
+              <button type="button" data-related="expense">출장비 규정 <span aria-hidden="true">→</span></button>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </div>
+</div></section>
