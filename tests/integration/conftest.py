@@ -101,9 +101,9 @@ def test_dsn():
         await conn.execute(BM25_DDL)
         for c in CONCEPTS:
             await conn.execute(
-                "INSERT INTO ontology_concepts (concept_id, canonical_term, synonyms, related_doc_ids, description, knowledge_pack)"
-                " VALUES ($1, $2, $3, $4, $5, $6)", c["concept_id"], c["canonical_term"], c["synonyms"],
-                c["related_doc_ids"], c["description"], c["knowledge_pack"])
+                "INSERT INTO ontology_concepts (concept_id, canonical_term, synonyms, related_doc_ids, description, knowledge_pack, dept_owner)"
+                " VALUES ($1, $2, $3, $4, $5, $6, $7)", c["concept_id"], c["canonical_term"], c["synonyms"],
+                c["related_doc_ids"], c["description"], c["knowledge_pack"], c.get("dept_owner"))
         ontology._current = None
         await ontology.reload_if_changed(conn)  # init.sql 시드 + 시험 개념으로 사전을 올림
         await _load(conn)
