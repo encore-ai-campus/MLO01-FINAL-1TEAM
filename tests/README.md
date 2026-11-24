@@ -2,13 +2,14 @@
 
 - `tests/unit/`: DB 없이 도는 시험입니다. 가짜 임베더·가짜 LLM 을 쓰므로 실제 서버에 붙지 않습니다.
 - `tests/integration/`: PostgreSQL 이 필요한 시험입니다. DB 환경 변수가 없으면 건너뜁니다.
+- `tests/security/`: 소스 코드를 훑는 정적 검사입니다(DB 없이 돕니다). 문서를 읽는 SQL 의 열람 조건 자리, 생성 LLM 라이브러리 import, 계정 쓰기·감사 SQL 위치, 로컬 임시 인증 패키지 import 금지를 확인합니다.
 - `tests/fakes.py`: 시험이 같이 쓰는 가짜(`FakeLLM`).
 - `tests/fixtures/`: 통합 시험이 넣는 준비 데이터.
 
 ## 실행
 
 ```bash
-pytest                      # DB 없이: unit 만 돌고 integration 은 건너뜁니다
+pytest                      # DB 없이: unit·security 만 돌고 integration 은 건너뜁니다
 ```
 
 ## DB 시험 준비
