@@ -11,8 +11,9 @@ EMBED_DIM = 1024  # chunks.embedding HALFVEC(1024). 모델 출력 2,048 의 앞�
 
 
 def embed_text(title: str, chapter_id: str | None, chapter_name: str | None, section_path: str, content: str) -> str:
-    """문서 조각 입력(3.2). 정제 스크립트 `build_pgvector_chunks.py` 의 `embed_header` 와 같은 모양."""
-    return f"[{title} | {chapter_id or 'ch00'} {chapter_name or '공통·미분류'} | {section_path}]\n{content}"
+    """문서 조각 입력(3.2). 정제 스크립트 `build_pgvector_chunks.py` 의 `embed_header` 와 같은 모양.
+    장 키는 없을 때(None)만 기본값이고, 빈 문자열은 스크립트처럼 그대로 씀."""
+    return f"[{title} | {'ch00' if chapter_id is None else chapter_id} {'공통·미분류' if chapter_name is None else chapter_name} | {section_path}]\n{content}"
 
 
 def _to_unit(vec: list[float]) -> list[float]:
