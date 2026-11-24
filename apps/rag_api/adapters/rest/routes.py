@@ -1,14 +1,16 @@
-"""REST 라우트(약속서 03A·03B): 문서 검색·AI 답변. 판정·데이터 접근은 기능 모듈이 함(adapters.md).
+"""REST 라우트(약속서 03A·03B·03D): 문서 검색·AI 답변·원문 보기. 판정·데이터 접근은 기능 모듈이 함(adapters.md).
 요청자 정보는 `context.get_auth_context`(기본 비로그인)로 받고, 인증 모듈이 그 함수를 바꿔 끼웁니다(인증 경계 2절)."""
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
 from rag_api.auth import context
 from rag_api.auth.context import AuthContext
-from rag_api.contracts.common import trace_id
+from rag_api.contracts.common import PgText, trace_id
+from rag_api.contracts.documents import DocumentResponse
 from rag_api.contracts.qa import QARequest, QAResponse
 from rag_api.contracts.search import SearchRequest, SearchResponse
+from rag_api.documents import service as documents
 from rag_api.qa import service as qa
 from rag_api.search import service as search
 
@@ -35,3 +37,14 @@ async def qa_answers(body: QARequest, request: Request, ctx: Active) -> QARespon
     s = request.app.state
     return await qa.answer(s.engine, s.llm, s.rules, s.departments, s.qa_departments, body, ctx, trace_id(request),
                            pool=s.pool, ip=client_ip(request))
+
+
+@router.get("/documents/{doc_id}")
+async def get_document(request: Request, response: Response, ctx: Ctx, doc_id: Annotated[PgText, Path(min_length=1, max_length=64)],
+                       version_tag: Annotated[PgText, Query(min_length=1, max_length=32)] | None = None,
+                       chunk_id: Annotated[PgText, Query(min_length=1, max_length=128)] | None = None) -> DocumentResponse:
+    """원문 보기(documents.md §6). 비로그인도 됨(볼 수 있는 문서만). 요청자마다 범위가 달라 캐시에 남기지 않음."""
+    s = request.app.state
+    response.headers["Cache-Control"] = "private, no-store"
+    return await documents.view(s.engine, s.pool, s.departments, s.rules, doc_id, version_tag, chunk_id, ctx, trace_id(request),
+                                ip=client_ip(request))

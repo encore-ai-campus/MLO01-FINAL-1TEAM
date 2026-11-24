@@ -19,11 +19,11 @@ class Status(BaseModel):
 
 
 class ApiError(Exception):
-    """기능이 내는 4xx. main 의 처리기가 `{"error": {...}}` 본문으로 바꿈."""
+    """기능이 내는 4xx. main 의 처리기가 `{"error": {...}}` 본문으로 바꿈. `extra` 는 `error` 에 더할 필드(원문 403 의 소관 부서 안내, 약속서 00 4.2)."""
 
-    def __init__(self, http_status: int, code: str, message: str):
+    def __init__(self, http_status: int, code: str, message: str, extra: dict | None = None):
         super().__init__(code)
-        self.http_status, self.code, self.message = http_status, code, message
+        self.http_status, self.code, self.message, self.extra = http_status, code, message, extra or {}
 
 
 _PREFIXES = (("/api/v1/auth", "auth"), ("/api/v1/departments", "auth"), ("/admin/v1", "adm"), ("/api/v1/search", "srch"), ("/api/v1/qa", "qa"),

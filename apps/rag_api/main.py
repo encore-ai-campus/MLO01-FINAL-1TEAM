@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException
 
 from rag_api.adapters.rest.routes import router
 from rag_api.contracts.common import ApiError, trace_id
+from rag_api.documents import service as documents
 from rag_api.knowledge_engine import term_stats
 from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.rules import values as rules
@@ -33,6 +34,7 @@ MAX_BODY_BYTES = 64 * 1024
 # DB 에 연결하지 못함 → 503(약속서 00 4.3). SQL 오류 등은 500. 풀이 다 차면 시간 제한 없이 기다리고,
 # TimeoutError 는 새 연결을 맺을 때(DB_CONNECT_TIMEOUT_S)만 나며 OSError 하위라 여기서 잡힘.
 # 그래서 다른 시간 초과(LLM 등)를 그 자리에서 잡지 않고 올리면 503 이 됨 — 그런 곳은 직접 잡을 것
+AUDIT_DRAIN_S = 2.0  # 앱이 끝날 때 남은 감사 쓰기(원문 보기)를 기다리는 시간 상한. 넘으면 그 줄은 잃음
 DB_UNAVAILABLE = (OSError, asyncpg.PostgresConnectionError, asyncpg.CannotConnectNowError, asyncpg.TooManyConnectionsError)
 
 
@@ -87,14 +89,16 @@ async def lifespan(app: FastAPI):
                 await refresher
         if llm:
             await llm.close()
+        with contextlib.suppress(TimeoutError):  # 풀을 닫기 전에: 남은 감사 줄이 닫힌 풀에 쓰이지 않게
+            await asyncio.wait_for(documents.drain(), AUDIT_DRAIN_S)
         await pool.close()
 
 
-def _error(request: Request, http_status: int, code: str, message: str, headers=None) -> JSONResponse:
-    headers = dict(headers or {})
+def _error(request: Request, http_status: int, code: str, message: str, headers=None, extra: dict | None = None) -> JSONResponse:
+    headers = {**(headers or {}), "Cache-Control": "no-store"}  # 모든 오류 응답: 요청자마다 다른 판정(원문 403·404 등)이 공유 캐시에 남지 않게
     if http_status == 401:  # 모든 401 에(RFC 9110 15.5.2, 약속서 00 4.2). 본문은 그대로
         headers["WWW-Authenticate"] = "Bearer"
-    return JSONResponse({"error": {"code": code, "message": message, "trace_id": trace_id(request)}},
+    return JSONResponse({"error": {"code": code, "message": message, "trace_id": trace_id(request), **(extra or {})}},
                         status_code=http_status, headers=headers)
 
 
@@ -104,7 +108,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError):
-        return _error(request, exc.http_status, exc.code, exc.message)
+        return _error(request, exc.http_status, exc.code, exc.message, extra=exc.extra)
 
     @app.exception_handler(RequestValidationError)
     async def validation_failed(request: Request, exc: RequestValidationError):
