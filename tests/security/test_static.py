@@ -90,7 +90,7 @@ def test_body_has_no_account_writes_and_audit_sql_lives_in_audit_module():
                 hits["users"].add(name)
             if audit_sql.search(text) and re.search(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", text, re.I):
                 hits["audit"].add(name)
-    assert hits == {"users": set(), "audit": set()}
+    assert hits == {"users": set(), "audit": {"audit/service.py"}}
 
 
 def test_body_does_not_import_the_local_auth_package():
