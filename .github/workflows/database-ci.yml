@@ -46,5 +46,8 @@ jobs:
             -f infra/database/compose.yml \
             config --quiet
 
+      - name: Validate deployment script
+        run: bash -n infra/database/deploy.sh
+
       - name: CI completed
         run: echo "Database configuration validation passed"
