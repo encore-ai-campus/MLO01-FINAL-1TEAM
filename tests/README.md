@@ -17,10 +17,10 @@ pytest                      # DB 없이: unit·security 만 돌고 integration �
 - PostgreSQL 17, `vector` 0.8 이상, `pg_textsearch` 1.5.1 이상(`shared_preload_libraries` 에 `pg_textsearch`)
 - 환경 변수 두 개를 정합니다.
   - `RAG_TEST_DATABASE_URL`: 시험용 서버 접속 주소(`postgresql://사용자@호스트:포트/postgres`). 시험이 세션마다 `rag_test_` 로 시작하는 새 DB 를 만들고 끝나면 지웁니다.
-  - `RAG_INIT_SQL`: 테이블을 만드는 `init.sql` 의 경로
+  - `RAG_INIT_SQL`: 테이블을 만드는 `init.sql` 의 경로(저장소의 `db/init.sql`). 시험 계정은 시험이 직접 넣습니다
 
 ```bash
-RAG_TEST_DATABASE_URL=... RAG_INIT_SQL=... pytest
+RAG_TEST_DATABASE_URL=... RAG_INIT_SQL=db/init.sql pytest
 ```
 
 시험은 설정 환경 변수를 모두 지운 뒤 필요한 것만 정하므로, 셸에 설정이 있어도 실제 임베딩·LLM 서버에 닿지 않습니다.
