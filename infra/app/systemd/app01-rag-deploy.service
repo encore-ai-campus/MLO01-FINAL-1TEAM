@@ -1,0 +1,12 @@
+[Unit]
+Description=Deploy a locally approved RAG API image
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+ConditionHost=app01
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/app/cd/pull-deploy.py
+TimeoutStartSec=20min
+UMask=0077
