@@ -16,6 +16,9 @@ state = app / "state"
 state.mkdir()
 env_before = (app / ".env").read_bytes()
 runtime = cd.Runtime(app)
+# Hosted runners can install the Compose plugin in the runner's home.
+runtime.env["HOME"] = str(Path.home())
+subprocess.run(["docker", "compose", "version"], env=runtime.env, check=True)
 source = cd.Deployment(runtime, state)
 initial = runtime.preserve()
 runtime.verify(initial)

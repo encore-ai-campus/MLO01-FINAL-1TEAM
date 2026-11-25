@@ -250,9 +250,12 @@ class Deployment:
             current, previous = self.state.get("current"), self.state.get("previous")
             if not current or not previous:
                 raise RuntimeError("No recorded previous deployment")
+            preserved = self.runtime.preserve()
+            if current["image_id"] != preserved["image_id"]:
+                raise RuntimeError("Running image differs from deploy state; review manual drift")
             if current.get("digest"):
                 self.state.setdefault("failed", {})[current["digest"]] = current["sha"]
-            self.switch(previous, current)
+            self.switch(previous, {**current, **preserved})
             return
         if not approved:
             print("No locally approved release")
