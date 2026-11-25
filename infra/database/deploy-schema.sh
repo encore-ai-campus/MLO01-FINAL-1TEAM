@@ -76,6 +76,7 @@ SELECT current_database(), current_user, version();
 SHOW shared_preload_libraries;
 SELECT name, default_version, installed_version
 FROM pg_available_extensions WHERE name IN ('vector','pgcrypto','pg_textsearch','timescaledb') ORDER BY 1;
+SELECT nspname FROM pg_namespace WHERE nspname !~ '^pg_' ORDER BY 1;
 SELECT schemaname, tablename, tableowner FROM pg_tables
 WHERE schemaname NOT IN ('pg_catalog','information_schema') AND schemaname NOT LIKE 'pg_toast%' ORDER BY 1,2;
 SELECT rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
@@ -107,6 +108,8 @@ BEGIN
         SELECT FROM pg_namespace
         WHERE nspname !~ '^pg_' AND nspname NOT IN ('public','information_schema')
           AND NOT EXISTS (SELECT FROM pg_extension WHERE extnamespace=pg_namespace.oid)
+          AND NOT EXISTS (SELECT FROM pg_depend WHERE classid='pg_namespace'::regclass
+                          AND objid=pg_namespace.oid AND deptype='e')
           AND nspname !~ '^_timescaledb_'
           AND nspname NOT IN ('timescaledb_information','timescaledb_experimental')
     ) THEN RAISE EXCEPTION 'Unexpected application schema; review migration separately'; END IF;
@@ -160,13 +163,20 @@ test -s "$archive"
 db_exec pg_restore --list <"$archive" >"$backup/archive.list" 2>>"$backup/backup.log"
 
 phase=restore
+psql_db "$database" -At -c 'SELECT extname,extversion FROM pg_extension ORDER BY 1' >"$backup/original.extensions"
 candidate="rag_schema_restore_$(date +%s)_$$_$RANDOM"
 db_exec createdb --no-password --username postgres --template template0 "$candidate" >"$backup/restore.log" 2>&1
 scratch=$candidate
+if grep -q '^timescaledb|' "$backup/original.extensions"; then
+    psql_db "$scratch" -c 'CREATE EXTENSION IF NOT EXISTS timescaledb' \
+        -c 'SELECT timescaledb_pre_restore()' >>"$backup/restore.log" 2>&1
+fi
 db_exec pg_restore --exit-on-error --single-transaction --no-password \
     --username postgres --dbname "$scratch" <"$archive" >>"$backup/restore.log" 2>&1
+if grep -q '^timescaledb|' "$backup/original.extensions"; then
+    psql_db "$scratch" -c 'SELECT timescaledb_post_restore()' >>"$backup/restore.log" 2>&1
+fi
 psql_db "$scratch" -At -c 'SELECT extname,extversion FROM pg_extension ORDER BY 1' >"$backup/restore.extensions"
-psql_db "$database" -At -c 'SELECT extname,extversion FROM pg_extension ORDER BY 1' >"$backup/original.extensions"
 cmp -s "$backup/original.extensions" "$backup/restore.extensions" || {
     echo 'Restored extension inventory differs. Stopping before deployment.' >&2; exit 1;
 }
