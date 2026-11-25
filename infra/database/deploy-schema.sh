@@ -39,8 +39,9 @@ cleanup() {
     fi
     if [[ $code != 0 ]]; then
         printf 'Stopped (phase %s). Backup/log directory: %s\n' "$phase" "${backup:-not created}" >&2
-        if [[ $phase == apply ]]; then
+        if [[ $phase == apply || $phase == postcommit ]]; then
             echo 'Before retrying, inspect the target state. A lost connection at COMMIT can leave the outcome unknown.' >&2
+            echo 'If already committed, keep writers offline and restore the verified archive to a separate database for review.' >&2
         fi
     fi
     exit "$code"
