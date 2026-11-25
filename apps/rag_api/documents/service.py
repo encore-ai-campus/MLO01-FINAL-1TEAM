@@ -9,8 +9,6 @@ import weakref
 from datetime import date, datetime
 from typing import NoReturn
 
-import yaml
-
 from rag_api.audit import service as audit
 from rag_api.auth.context import AuthContext
 from rag_api.contracts.common import KST, ApiError, version_badge
@@ -18,6 +16,7 @@ from rag_api.contracts.documents import DocumentResponse, Location, VersionItem,
 from rag_api.knowledge_engine.acl import acl_predicate, active_packs, denied_predicate, render, visible_set
 from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.rules.values import Rules
+from rag_api.shared.version_header import split_header
 
 AUDIT_CONCURRENCY = 4  # 동시에 쓰는 감사 줄 상한(DB 연결을 다 쓰지 않게)
 HEAD_CHARS = 4096  # 판 목록에서 판마다 가져오는 본문 앞부분(버전 머리말). 이보다 긴 머리말은 읽을 수 없는 것으로 봄(닫힘)
@@ -51,7 +50,6 @@ WHERE {denied} AND d.doc_id = {doc_id}
 """
 
 CHUNK_ID = re.compile(r"([^:]{1,64})::([^:]{1,32})::c[0-9]{3,}")  # {doc_id}::{version_tag}::cNNN(약속서 00 5절)
-HEADER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.S)
 
 
 _pending: set[asyncio.Task] = set()  # 감사 쓰기 작업의 참조(끝나면 빠짐). 작업이 도중에 치워지지 않게
@@ -109,19 +107,6 @@ def parse_chunk_id(chunk_id: str) -> tuple[str, str]:
     if not m:
         raise ApiError(422, "VALIDATION_FAILED", "chunk_id: {doc_id}::{version_tag}::cNNN 모양이어야 합니다.")
     return m[1], m[2]
-
-
-def split_header(raw: str) -> tuple[dict, str]:
-    """(머리말, 본문). 경계 계약 5.1 의 버전 머리말. 머리말이 없으면 ({}, 그대로), 있는데 읽을 수 없으면 ({}, 머리말 뗀 본문).
-    ponytail: shared 의 split_header(경계 계약 5.1)가 저장소에 들어오면 그것으로 바꿈."""
-    m = HEADER.match(raw)
-    if not m:
-        return {}, raw
-    try:
-        meta = yaml.safe_load(m[1])
-    except yaml.YAMLError:
-        meta = None
-    return (meta if isinstance(meta, dict) else {}), raw[m.end():]
 
 
 def header_allows(head: str, depts: list[str] | None) -> bool:
