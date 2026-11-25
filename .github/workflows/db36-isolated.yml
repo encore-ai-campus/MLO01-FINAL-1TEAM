@@ -1,0 +1,47 @@
+name: DB36 isolated validation
+on:
+  push:
+    branches: [verify/db36-schema-20261125]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAG_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:54329/postgres
+      RAG_INIT_SQL: db/init.sql
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Start isolated DB from DB01 Compose digest
+        run: |
+          image=$(awk '$1 == "image:" {print $2}' infra/database/compose.yml)
+          test "$image" = 'timescale/timescaledb-ha:pg17@sha256:c72b4cb8aaa0a52c0870c2b0a48173c595ee9bef0f3d8f92c3f546c69fef3567'
+          docker run -d --name isolated-db36 --shm-size 512m -p 127.0.0.1:54329:5432 -e POSTGRES_PASSWORD=isolated-ci-only "$image" -c shared_preload_libraries=timescaledb,pg_textsearch -c timezone=Asia/Seoul
+          for attempt in $(seq 1 60); do
+            if docker exec isolated-db36 pg_isready -h 127.0.0.1 -U postgres; then exit 0; fi
+            sleep 2
+          done
+          docker logs isolated-db36
+          exit 1
+      - name: Apply and verify v1.12 on an empty database
+        run: |
+          docker exec isolated-db36 psql -X -U postgres -v ON_ERROR_STOP=1 -c 'CREATE ROLE rag_app' -c 'CREATE ROLE rag_pipeline' -c 'CREATE DATABASE schema_check'
+          docker exec -i isolated-db36 psql -X -U postgres -d schema_check -v ON_ERROR_STOP=1 < db/init.sql
+          docker exec -i isolated-db36 psql -X -U postgres -d schema_check -v ON_ERROR_STOP=1 < db/verify36.sql
+      - name: Verify transaction rollback on SQL error
+        run: |
+          docker exec isolated-db36 psql -X -U postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE rollback_check'
+          sed '/^COMMIT;/i SELECT 1 / 0;' db/init.sql > /tmp/init-with-error.sql
+          if docker exec -i isolated-db36 psql -X -U postgres -d rollback_check -v ON_ERROR_STOP=1 < /tmp/init-with-error.sql > /tmp/rollback-result.log 2>&1; then
+            exit 1
+          fi
+          grep 'division by zero' /tmp/rollback-result.log
+          test "$(docker exec isolated-db36 psql -XAt -U postgres -d rollback_check -c "SELECT to_regclass('public.departments') IS NULL AND NOT EXISTS (SELECT FROM pg_extension WHERE extname IN ('pgcrypto','vector','pg_textsearch'))")" = t
+      - name: Run latest dev RAG API suite with a real isolated database
+        run: |
+          pip install -r requirements.txt
+          pytest -q -ra
