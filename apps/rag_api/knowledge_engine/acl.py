@@ -2,7 +2,8 @@
 
 - `acl_predicate`: 현행 버전 + 열람(검색·원문·그래프 출처 문서 등 기본)
 - `visible_predicate`: 현행 조건을 뺀 열람(그래프 항목의 폐기 문서를 is_active=false 로 남길 때)
-- `hidden_predicate`: 볼 수 없는 현행 문서(존재 공개 안내)
+- `denied_predicate`: 볼 수 없는 현행 문서(직접 열기의 거부 판정)
+- `hidden_predicate`: 그중 존재 공개 안내 대상(user·ACTIVE·비ADMIN)
 """
 import re
 from dataclasses import dataclass
@@ -51,14 +52,20 @@ def acl_predicate(ctx: AuthContext, packs: list[str], d: str = "d", v: str = "v"
         + visible_predicate(ctx, packs, d)
 
 
-def hidden_predicate(ctx: AuthContext, packs: list[str], d: str = "d", v: str = "v") -> Sql | None:
-    """존재 공개 안내(설계 §3): 현행·활성 팩인데 요청자가 볼 수 없는 문서.
-    안내는 user·ACTIVE·비ADMIN 에게만 하므로 그 밖은 None."""
+def denied_predicate(ctx: AuthContext, packs: list[str], d: str = "d", v: str = "v") -> Sql | None:
+    """현행·활성 팩인데 요청자가 볼 수 없는 문서(직접 열기의 거부 판정, 설계 §2.3). ADMIN 은 볼 수 없는 문서가 없어 None."""
     depts = visible_set(ctx)
-    if not (ctx.principal_type == "user" and ctx.status == "ACTIVE") or depts is None:
+    if depts is None:
         return None
     return Sql(f"{d}.current_version_id = {v}.version_id AND {v}.version_status = 'active'"
                f" AND {d}.knowledge_pack = ANY($?::text[]) AND NOT ({d}.allowed_depts && $?::text[])", (packs, depts))
+
+
+def hidden_predicate(ctx: AuthContext, packs: list[str], d: str = "d", v: str = "v") -> Sql | None:
+    """존재 공개 안내(설계 §3): 볼 수 없는 문서. 안내는 user·ACTIVE·비ADMIN 에게만 하므로 그 밖은 None."""
+    if not (ctx.principal_type == "user" and ctx.status == "ACTIVE"):
+        return None
+    return denied_predicate(ctx, packs, d, v)
 
 
 def render(template: str, **params) -> tuple[str, list]:

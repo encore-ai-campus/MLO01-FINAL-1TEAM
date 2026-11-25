@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   unit-test:
-    name: RAG 단위 시험
+    name: RAG 시험
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -32,5 +32,5 @@ jobs:
       - name: 의존성 설치
         run: pip install -r requirements.txt
 
-      - name: 단위 시험
-        run: pytest -q tests/unit
+      - name: 시험 (DB 없이, unit·security)
+        run: pytest -q

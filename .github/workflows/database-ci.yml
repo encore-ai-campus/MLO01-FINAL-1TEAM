@@ -1,0 +1,125 @@
+name: Database CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'infra/database/**'
+      - 'db/init.sql'
+      - '.github/workflows/database-ci.yml'
+
+  push:
+    branches:
+      - dev
+      - 'infra/**'
+    paths:
+      - 'infra/database/**'
+      - 'db/init.sql'
+      - '.github/workflows/database-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Database Configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Check required files
+        run: |
+          test -s infra/database/compose.yml
+          test -s infra/database/.env.example
+          test -s infra/database/.gitignore
+          test -s infra/database/pg_hba.conf.template
+          test -s infra/database/init-extensions.sql
+          test -s infra/database/README.md
+
+      - name: Validate Docker Compose
+        run: |
+          docker compose version
+          docker compose \
+            --env-file infra/database/.env.example \
+            -f infra/database/compose.yml \
+            config --quiet
+
+      - name: Validate deployment script
+        run: |
+          bash -n infra/database/deploy.sh
+          bash -n infra/database/deploy-schema.sh
+
+  rehearse:
+    name: Rehearse DB01 schema deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lint and start a disposable DB01 fixture
+        run: |
+          bash -n infra/database/deploy-schema.sh
+          sudo hostname db01
+          sudo install -d -m 0700 /opt/database
+          image=$(awk '$1 == "image:" {print $2}' infra/database/compose.yml)
+          docker run -d --name rag-postgres --shm-size 512m -e POSTGRES_PASSWORD=isolated-fixture \
+            "$image" -c shared_preload_libraries=timescaledb,pg_textsearch
+          for attempt in $(seq 1 60); do
+            if docker exec rag-postgres pg_isready -h 127.0.0.1 -U postgres; then exit 0; fi
+            sleep 2
+          done
+          docker logs rag-postgres
+          exit 1
+      - name: Verify read-only preflight and rollback on inherited DELETE
+        run: |
+          db() { docker exec -i --user postgres rag-postgres psql -X -v ON_ERROR_STOP=1 -At "$@"; }
+          db -d postgres <<'SQL'
+          CREATE ROLE rag_app LOGIN;
+          CREATE ROLE rag_pipeline LOGIN;
+          CREATE ROLE rag_admin LOGIN;
+          CREATE ROLE rag_monitor LOGIN;
+          CREATE ROLE forbidden_delete;
+          GRANT forbidden_delete TO rag_pipeline;
+          CREATE DATABASE rag_dev;
+          SQL
+          docker exec -d --user postgres rag-postgres sh -c \
+            '{ echo "SELECT 1;"; sleep 15; } | PGAPPNAME=exporter-fixture psql -X -U rag_monitor -d rag_dev'
+          for attempt in $(seq 1 20); do
+            if test "$(db -d postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name='exporter-fixture' AND state='idle'")" = 1; then break; fi
+            test "$attempt" != 20
+            sleep 1
+          done
+          if sudo bash infra/database/deploy-schema.sh --apply > /tmp/exporter-check.log 2>&1; then exit 1; fi
+          grep -E 'rag_monitor +\| idle' /tmp/exporter-check.log
+          grep -F 'Other DB clients are connected' /tmp/exporter-check.log
+          test -z "$(sudo find /opt/database -name rag_dev.dump -print -quit)"
+          for attempt in $(seq 1 25); do
+            if test "$(db -d postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name='exporter-fixture'")" = 0; then break; fi
+            test "$attempt" != 25
+            sleep 1
+          done
+          sudo bash infra/database/deploy-schema.sh --check
+          test -z "$(sudo find /opt/database -name rag_dev.dump -print -quit)"
+          db -d rag_dev -c 'ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT DELETE ON TABLES TO forbidden_delete'
+          if sudo bash infra/database/deploy-schema.sh --apply; then exit 1; fi
+          sudo find /opt/database -name apply.log -exec grep -lF 'Service role can own, delete, truncate or add triggers' {} + | grep -q /apply.log
+          test "$(db -d rag_dev -c "SELECT to_regclass('public.users') IS NULL")" = t
+          test "$(db -d postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'rag_schema_restore_%'")" = 0
+          db -d rag_dev -c 'ALTER DEFAULT PRIVILEGES FOR ROLE postgres REVOKE DELETE ON TABLES FROM forbidden_delete'
+      - name: Verify successful apply and refusal to overwrite existing schema
+        run: |
+          db() { docker exec -i --user postgres rag-postgres psql -X -v ON_ERROR_STOP=1 -At "$@"; }
+          sudo bash infra/database/deploy-schema.sh --apply
+          test "$(db -d rag_dev -c "SELECT count(*) FROM public.users")" = 0
+          test "$(db -d rag_dev -c "SELECT has_table_privilege('rag_pipeline','documents','DELETE') OR has_table_privilege('rag_app','users','DELETE')")" = f
+          test "$(db -d postgres -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'rag_schema_restore_%'")" = 0
+          if sudo bash infra/database/deploy-schema.sh --apply; then exit 1; fi
+          test "$(sudo find /opt/database -name rag_dev.dump | wc -l)" = 2
+      - name: Print isolated diagnostics on failure
+        if: failure()
+        run: |
+          sudo find /opt/database -name '*.log' -exec tail -n 30 {} \;

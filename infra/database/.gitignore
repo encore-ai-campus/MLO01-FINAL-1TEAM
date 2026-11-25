@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+secrets/
+runtime/
+pg_hba.conf
+*.bak
+*.bak.*
+*.pem
+*.key
+*.log

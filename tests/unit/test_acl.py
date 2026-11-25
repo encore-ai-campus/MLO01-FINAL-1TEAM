@@ -3,8 +3,8 @@ from datetime import datetime
 import pytest
 
 from rag_api.auth.context import AuthContext
-from rag_api.knowledge_engine.acl import (Sql, acl_predicate, active_packs, hidden_predicate, render, visible_predicate,
-                                         visible_set)
+from rag_api.knowledge_engine.acl import (Sql, acl_predicate, active_packs, denied_predicate, hidden_predicate, render,
+                                         visible_predicate, visible_set)
 
 NOW = datetime(2026, 11, 21)
 
@@ -82,3 +82,21 @@ def test_hidden_predicate_shape():
     assert p.text == ("d.current_version_id = v.version_id AND v.version_status = 'active'"
                       " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])")
     assert p.args == (["base", "it_service"], ["PUBLIC", "ALL_EMP", "HR", "FIN"])
+
+
+@pytest.mark.parametrize("c, depts", [
+    (ctx("anonymous"), ["PUBLIC"]), (ctx(status="PENDING", dept="HR"), ["PUBLIC"]), (ctx(status="REVISION_REQ", dept="HR"), ["PUBLIC"]),
+    (ctx(status="REJECTED", dept="HR"), ["PUBLIC"]), (ctx("system"), ["PUBLIC", "ALL_EMP"]),
+    (ctx(status="ACTIVE", dept="HR"), ["PUBLIC", "ALL_EMP", "HR"])])
+def test_denied_predicate_covers_every_non_admin_requester(c, depts):
+    """원문 보기의 거부 판정은 존재 공개 안내와 달리 비로그인·승인 전·system 도 "볼 수 없는 문서"를 가림. 안내 대상(ACTIVE)만 hidden 이 같은 조각."""
+    p = denied_predicate(c, ["base", "it_service"])
+    assert p.text == ("d.current_version_id = v.version_id AND v.version_status = 'active'"
+                      " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])")
+    assert p.args == (["base", "it_service"], depts)
+    assert (hidden_predicate(c, ["base", "it_service"]) == p) is (c.principal_type == "user" and c.status == "ACTIVE")
+
+
+def test_denied_predicate_is_none_for_admin_and_honors_aliases():
+    assert denied_predicate(ctx(status="ACTIVE", role="ADMIN"), ["base"]) is None
+    assert denied_predicate(ctx("anonymous"), ["base"], d="x", v="y").text.startswith("x.current_version_id = y.version_id AND y.version_status")

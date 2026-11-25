@@ -29,6 +29,26 @@ from rag_api.shared.tokenize import tsv_source
 FIXTURE = json.loads((Path(__file__).parents[1] / "fixtures" / "retrieval_docs.json").read_text(encoding="utf-8"))
 DOCS, CONCEPTS = FIXTURE["documents"], FIXTURE["concepts"]
 
+# 시험 계정: 저장소 init.sql 은 시연 계정 시드를 뺐으므로(로그인 정보 노출 방지) 시험이 직접 넣음. 비밀번호 없음.
+# 메인기획 배포본 init.sql 의 시드와 이메일·부서·역할·상태가 같아 그 판으로 돌려도 겹치지 않음(ON CONFLICT)
+# (이메일, 이름, 희망 부서, 부서, 겸직 부서, 역할, 상태)
+USERS = [
+    ("admin@company.com", "김관리", "COMMON", "COMMON", [], "ADMIN", "ACTIVE"),
+    ("hr@company.com", "이인사", "HR", "HR", [], "DEPT_MANAGER", "ACTIVE"),
+    ("fin@company.com", "박재무", "FIN", "FIN", [], "DEPT_MANAGER", "ACTIVE"),
+    ("lgl@company.com", "최법무", "LGL", "LGL", [], "EMPLOYEE", "ACTIVE"),
+    ("ops.newhire@company.com", "정신입", "OPS", "OPS", [], "NEW_HIRE", "ACTIVE"),
+    ("cx@company.com", "강고객", "CX", "CX", [], "EMPLOYEE", "ACTIVE"),
+    ("pln@company.com", "조기획", "PLN", "PLN", ["SLS"], "EMPLOYEE", "ACTIVE"),
+    ("eng@company.com", "윤개발", "ENG", "ENG", [], "EMPLOYEE", "ACTIVE"),
+    ("inf@company.com", "신보안", "INF", "INF", [], "DEPT_MANAGER", "ACTIVE"),
+    ("sls.newhire@company.com", "한영업", "SLS", "SLS", [], "NEW_HIRE", "ACTIVE"),
+    ("pending@company.com", "서대기", "HR", None, [], "NEW_HIRE", "PENDING"),
+    ("inactive@company.com", "오퇴사", "FIN", "FIN", [], "EMPLOYEE", "INACTIVE"),
+    ("revision@company.com", "박보완", "ENG", None, [], "NEW_HIRE", "REVISION_REQ"),
+    ("rejected@company.com", "최거절", "SLS", None, [], "EMPLOYEE", "REJECTED"),
+]
+
 def fake_vec(text: str) -> list[float]:
     """글자로 정해지는 가짜 단위 벡터: 공백 뺀 글자 두 개씩을 1,024 칸에 셈."""
     s = "".join(unicodedata.normalize("NFC", text).lower().split())
@@ -99,11 +119,15 @@ def test_dsn():
         conn = await asyncpg.connect(dsn)
         await conn.execute(Path(init_sql).read_text(encoding="utf-8"))
         await conn.execute(BM25_DDL)
+        await conn.executemany(
+            "INSERT INTO users (email, name, requested_dept_code, dept_code, extra_depts, role, status, approved_at)"
+            " VALUES ($1, $2, $3, $4::varchar, $5, $6, $7, CASE WHEN $4::varchar IS NULL THEN NULL ELSE NOW() END)"
+            " ON CONFLICT (email) DO NOTHING", USERS)
         for c in CONCEPTS:
             await conn.execute(
-                "INSERT INTO ontology_concepts (concept_id, canonical_term, synonyms, related_doc_ids, description, knowledge_pack)"
-                " VALUES ($1, $2, $3, $4, $5, $6)", c["concept_id"], c["canonical_term"], c["synonyms"],
-                c["related_doc_ids"], c["description"], c["knowledge_pack"])
+                "INSERT INTO ontology_concepts (concept_id, canonical_term, synonyms, related_doc_ids, description, knowledge_pack, dept_owner)"
+                " VALUES ($1, $2, $3, $4, $5, $6, $7)", c["concept_id"], c["canonical_term"], c["synonyms"],
+                c["related_doc_ids"], c["description"], c["knowledge_pack"], c.get("dept_owner"))
         ontology._current = None
         await ontology.reload_if_changed(conn)  # init.sql 시드 + 시험 개념으로 사전을 올림
         await _load(conn)
