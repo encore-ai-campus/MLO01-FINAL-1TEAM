@@ -1,11 +1,11 @@
 <section class="screen card login-card" data-screen="auth">
       <header class="login-heading">
-        <div><h1 class="frame-heading" tabindex="-1">로그인</h1><p>사내 계정으로 로그인하세요.</p></div>
+        <div><h1 id="auth-title" class="frame-heading" tabindex="-1">로그인</h1><p id="auth-description">사내 계정으로 로그인하세요.</p></div>
         <div class="login-mascot-frame">
           <img class="login-mascot" src="{{ request.url_for('ui-static', path='images/cozy_1.png') }}" width="1536" height="1024" alt="">
         </div>
       </header>
-      <form class="form" id="login-form">
+      <form class="form" id="login-form" data-auth-view="login">
         <label>사내 이메일 <input id="login-email" type="email" value="employee@example.com" required autocomplete="off"></label>
         <label>비밀번호 <input name="password" type="password" value="demo-password" required autocomplete="off"></label>
         <div id="first-login-notice" class="state-note stack" hidden>
@@ -19,5 +19,26 @@
         </div>
         <div class="row login-actions"><button class="btn btn-primary btn-wide" type="submit">로그인</button></div>
       </form>
-      <p id="auth-notice" class="notice" aria-live="polite"></p>
+      <p id="auth-notice" class="notice" data-auth-view="login" aria-live="polite"></p>
+      <form class="form" id="signup-form" data-auth-view="signup" hidden>
+        <label>이름 <input name="displayName" required maxlength="40" autocomplete="off"></label>
+        <label>사내 이메일 <input name="email" type="email" required maxlength="100" autocomplete="email"></label>
+        <label>사번 (선택) <input name="employeeId" maxlength="24" autocomplete="off"></label>
+        <label>희망 부서 <select name="department" required><option>경영운영팀</option><option>재무팀</option><option>개발팀</option></select></label>
+        <div class="row"><button class="btn btn-primary btn-wide" id="signup-submit" type="submit">가입 신청</button></div>
+      </form>
+      <div data-auth-view="status" class="stack" hidden>
+        <form class="form" id="application-verification">
+          <label>신청 이메일 <input name="email" type="email" required autocomplete="email"></label>
+          <label>비밀번호 <input name="password" type="password" required autocomplete="current-password"></label>
+          <div class="row"><button class="btn btn-primary btn-wide" type="submit">신청 상태 확인</button></div>
+        </form>
+        <div id="application-status" class="stack" hidden></div>
+      </div>
+      <p id="application-notice" class="notice" aria-live="polite" hidden></p>
+      <nav class="login-links" aria-label="계정 메뉴">
+        <button type="button" class="login-link" data-auth-mode="login" hidden>로그인으로 돌아가기</button>
+        <button type="button" class="login-link" data-auth-mode="signup">가입 신청</button>
+        <button type="button" class="login-link" data-auth-mode="status">신청 상태 확인</button>
+      </nav>
     </section>
