@@ -1,7 +1,7 @@
 -- =============================================================================
--- [MLO_01_FINAL] 정보지식플랫폼 PostgreSQL 17+ 통합 초기화 스크립트 (init.sql v1.11)
+-- [MLO_01_FINAL] 정보지식플랫폼 PostgreSQL 17+ 통합 초기화 스크립트 (init.sql v1.12)
 -- 작성/관리: 역할 1 (PM · DBA 메인) / 관련 티켓: W1-R1-04A, W1-R1-04B, W1-R3-02B
--- 아키텍처 기준: 04_레이크하우스_및_DB_ERD_설계서.md (v1.11 · 100% 1:N 무조인 · HALFVEC 1024 · PG 17+)
+-- 아키텍처 기준: 04_레이크하우스_및_DB_ERD_설계서.md (v1.12 · 100% 1:N 무조인 · HALFVEC 1024 · PG 17+)
 -- 특징:
 --   1. N:M 조인 테이블(document_acl, ontology_relations) 완전 제거 -> 100% 1:N 구조
 --   2. 4주차 코어 7개 테이블 + 8주차 확장 테이블(answer_feedbacks) 및 확장 컬럼 5종 선반영
@@ -72,17 +72,26 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================================================
--- 3. auth_audit_logs — 보안 · 인증 · 권한 · 문서검수 감사 로그 테이블 (users 1:N)
+-- 3. auth_audit_logs — 보안 · 인증 · 권한 · 문서검수 감사 로그 테이블 (users 1:N, 분기 파티션)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS auth_audit_logs (
-    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    log_id UUID DEFAULT gen_random_uuid(),
     actor_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
     target_user_id UUID,
-    action VARCHAR(32) NOT NULL, -- SIGNUP | APPROVE | DEACTIVATE | REACTIVATE | ROLE_DEPT_CHANGE | LOGIN | ACL_DENIED | SIGNUP_REV_REQ | SIGNUP_REJECT | USER_CREATE | USER_IMPORT | PW_CHANGE | PW_RESET | DOC_APPROVE | DOC_REJECT | DOC_UNPUBLISH | BUILDER_PUBLISH | PACK_SWITCH
+    action VARCHAR(32) NOT NULL, -- SIGNUP | APPROVE | DEACTIVATE | REACTIVATE | ROLE_DEPT_CHANGE | LOGIN | ACL_DENIED | SIGNUP_REV_REQ | SIGNUP_REJECT | USER_CREATE | USER_IMPORT | PW_CHANGE | PW_RESET | DOC_APPROVE | DOC_REJECT | DOC_UNPUBLISH | DOC_VERIFY | DOC_EXTEND | DOC_EXPIRE | DOC_REACTIVATE | BUILDER_PUBLISH | PACK_SWITCH
     detail_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     ip_address VARCHAR(64),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (log_id, created_at)
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE IF NOT EXISTS auth_audit_logs_2026_q4 PARTITION OF auth_audit_logs
+    FOR VALUES FROM ('2026-10-01') TO ('2027-01-01');
+CREATE TABLE IF NOT EXISTS auth_audit_logs_2027_q1 PARTITION OF auth_audit_logs
+    FOR VALUES FROM ('2027-01-01') TO ('2027-04-01');
+CREATE TABLE IF NOT EXISTS auth_audit_logs_2027_q2 PARTITION OF auth_audit_logs
+    FOR VALUES FROM ('2027-04-01') TO ('2027-07-01');
+CREATE TABLE IF NOT EXISTS auth_audit_logs_default PARTITION OF auth_audit_logs DEFAULT;
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created ON auth_audit_logs (action, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON auth_audit_logs (actor_user_id, created_at DESC);
@@ -108,6 +117,7 @@ CREATE TABLE IF NOT EXISTS documents (
     needs_admin_review BOOLEAN NOT NULL DEFAULT FALSE,
     is_discoverable BOOLEAN NOT NULL DEFAULT FALSE, -- 권한 외 사용자에게 제목/주관부서 존재 안내 노출 여부 (본문/청크는 무조건 차단)
     sync_quarter VARCHAR(16) NOT NULL DEFAULT '2026-Q4',
+    last_verified_at TIMESTAMP, -- [회신 10차] 소관 부서 담당자(DEPT_MANAGER) 분기 유효 점검 확인 시각
     current_version_id UUID, -- 현행 active 버전 포인터 (폐기/급히내리기/초회검수대기 시 NULL)
     ontology_graph_meta JSONB NOT NULL DEFAULT '{}'::jsonb, -- [확장 컬럼 선반영] Delta Silver에서 양방향 사전 컴파일된 prev_steps, next_steps, required_forms, conflicts 그래프 뷰
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -197,10 +207,10 @@ CREATE INDEX IF NOT EXISTS idx_onto_synonyms_gin ON ontology_concepts USING gin 
 CREATE INDEX IF NOT EXISTS idx_onto_canonical_term ON ontology_concepts (canonical_term);
 
 -- =============================================================================
--- 8. answer_feedbacks — 답변 좋아요 및 오답·개정 신고 검수 큐 테이블 (users 1:N · 선반영)
+-- 8. answer_feedbacks — 답변 좋아요 및 오답·개정 신고 검수 큐 테이블 (users 1:N · 분기 파티션)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS answer_feedbacks (
-    feedback_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    feedback_id UUID DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
     dept_code VARCHAR(32) REFERENCES departments(dept_code),
     knowledge_pack VARCHAR(32) NOT NULL DEFAULT 'it_service',
@@ -213,8 +223,17 @@ CREATE TABLE IF NOT EXISTS answer_feedbacks (
     resolved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
     resolution_note TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    resolved_at TIMESTAMP
-);
+    resolved_at TIMESTAMP,
+    PRIMARY KEY (feedback_id, created_at)
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE IF NOT EXISTS answer_feedbacks_2026_q4 PARTITION OF answer_feedbacks
+    FOR VALUES FROM ('2026-10-01') TO ('2027-01-01');
+CREATE TABLE IF NOT EXISTS answer_feedbacks_2027_q1 PARTITION OF answer_feedbacks
+    FOR VALUES FROM ('2027-01-01') TO ('2027-04-01');
+CREATE TABLE IF NOT EXISTS answer_feedbacks_2027_q2 PARTITION OF answer_feedbacks
+    FOR VALUES FROM ('2027-04-01') TO ('2027-07-01');
+CREATE TABLE IF NOT EXISTS answer_feedbacks_default PARTITION OF answer_feedbacks DEFAULT;
 
 CREATE INDEX IF NOT EXISTS idx_feedbacks_status_created ON answer_feedbacks (review_status, created_at DESC);
 
@@ -378,5 +397,16 @@ VALUES
     'it_service'
 )
 ON CONFLICT (concept_id) DO NOTHING;
+
+-- [회신 10차] 앱/파이프라인 DB 계정의 연쇄 삭제(ON DELETE CASCADE) 방지: DELETE 권한 회수 (폐기는 archived 상태로만 처리)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rag_app') THEN
+        REVOKE DELETE ON documents, document_versions, users FROM rag_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rag_pipeline') THEN
+        REVOKE DELETE ON documents, document_versions, users FROM rag_pipeline;
+    END IF;
+END $$;
 
 COMMIT;
