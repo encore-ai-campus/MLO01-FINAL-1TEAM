@@ -3,3 +3,18 @@
 !apps/
 !apps/rag_api/
 !apps/rag_api/**
+!apps/ui/
+!apps/ui/**
+
+# Keep local configuration and generated files out even under allowed apps.
+**/.env
+**/.env.*
+**/.git
+**/.git/**
+**/__pycache__
+**/__pycache__/**
+**/*.py[cod]
+**/.venv
+**/.venv/**
+**/node_modules
+**/node_modules/**

@@ -10,7 +10,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY apps/rag_api ./apps/rag_api
+# The Dockerfile-specific allowlist includes rag_api and, when present, ui.
+# Copy the existing parent so an API-only checkout does not require apps/ui.
+COPY apps ./apps
 
 RUN useradd --create-home --uid 10001 appuser
 
