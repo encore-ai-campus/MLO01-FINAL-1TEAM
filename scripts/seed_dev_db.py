@@ -7,13 +7,15 @@
 - init.sql v1.11 에 BM25 DDL 이 없어 계약 2.6 의 DDL(`shared.db.BM25_DDL`)을 더 돌립니다.
 - 원문(raw_markdown)은 정제 원문(documents.yaml 의 `relative_path`, rag_ready 의 부모 폴더 기준)의 본문에 경계 계약 5.1 모양의 버전 머리말을 붙여 넣습니다
   (원문 보기·이전 버전 열람 판정이 읽음). 개념 태그(concept_ids)는 빈 배열로 둡니다.
-- Ollama /v1 은 truncate 를 넘기지 않아 num_ctx 를 넘는 입력은 조용히 잘릴 수 있습니다(지금 데이터는 최대 679 토큰).
+- Ollama /v1 은 truncate 를 넘기지 않아 num_ctx 를 넘는 입력은 조용히 잘릴 수 있습니다. 그래서 넣기 전에 KURE-v3 토크나이저로 길이를 세고,
+  EMBED_MAX_TOKENS 를 넘는 조각 수를 경고로 남깁니다(경계 계약 3.4).
 
 환경 변수
 - DATABASE_URL: 만들 개발 DB(예: postgresql://postgres@127.0.0.1:5432/rag_dev). 같은 서버의 postgres DB 로 붙어 만듭니다
 - RAG_INIT_SQL: init.sql 경로
 - RAG_DATA_DIR: 정제본 rag_ready 폴더(documents.yaml 등이 있는 곳)
-- EMBED_BASE_URL·EMBED_MODEL 등: shared.config
+- EMBED_TOKENIZER_PATH: KURE-v3 tokenizer.json 경로(필수. 없으면 DB 에 붙기 전에 멈춤)
+- EMBED_BASE_URL·EMBED_MODEL·EMBED_MAX_TOKENS 등: shared.config
 
 사용: PYTHONPATH=apps python scripts/seed_dev_db.py [--reset]   (--reset: 같은 이름의 DB 를 지우고 다시 만듦)
 """
@@ -32,6 +34,7 @@ import yaml
 from rag_api.settings import ontology
 from rag_api.shared.config import Config
 from rag_api.shared.db import BM25_DDL
+from rag_api.shared.embed_tokens import load_tokenizer
 from rag_api.shared.embedding import OpenAIEmbeddingClient, embed_text
 from rag_api.shared.tokenize import current_dict_version, tsv_source
 
@@ -92,6 +95,7 @@ async def main(reset: bool) -> None:
     # 판마다 documents.yaml 의 relative_path(rag_ready 의 부모 기준)로 원문을 읽음. 없으면 DB 에 붙기 전에 FileNotFoundError 로 멈춤
     bodies = read_bodies(data.parent, docs)
     chunks = load_yaml(data / "chunks.yaml") + load_yaml(data / "chunks_archived.yaml")
+    tok = load_tokenizer(cfg.embed_tokenizer_path)  # 없으면 DB 에 붙기 전에 FileNotFoundError
     t0 = time.monotonic()
 
     await create_db(cfg.database_url, reset)
@@ -102,7 +106,8 @@ async def main(reset: bool) -> None:
         await ontology.reload_if_changed(conn)  # tsv 를 init.sql 온톨로지 사전으로 자름
 
         # 임베딩: 정제본 embed_text 와 같은 shared.embed_text(끝 줄바꿈은 뗌, 계약 5.3)
-        client = OpenAIEmbeddingClient(cfg.embed_base_url, cfg.embed_model, EMBED_TIMEOUT_S, cfg.embed_api_key)
+        client = OpenAIEmbeddingClient(cfg.embed_base_url, cfg.embed_model, EMBED_TIMEOUT_S, cfg.embed_api_key,
+                                       tokenizer=tok, max_tokens=cfg.embed_max_tokens)
         texts = [embed_text(c["title"], c.get("chapter_id"), c.get("chapter_name"), c["section_path"],
                             c["content"].rstrip("\n")) for c in chunks]
         t1 = time.monotonic()

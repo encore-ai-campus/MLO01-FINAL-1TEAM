@@ -17,6 +17,9 @@ class Config:
     embed_model: str = "nlpai-lab/KURE-v3"
     embed_api_key: str = field(default="unused", repr=False)
     embed_timeout_s: float = 0.5
+    # 문서 조각을 임베딩하는 쪽(파이프라인·시드)만 읽음. 서버(질문만 임베딩)는 비워 둠(계약 3.4)
+    embed_tokenizer_path: str = ""
+    embed_max_tokens: int = 1024  # 임베딩 입력 상한(`passage: ` 포함). 바꾸면 조각을 다시 쪼개야 함(3.5)
     vector_channel_enabled: bool = True
     ontology_expansion_enabled: bool = False
     ontology_expansion_max_tokens: int = 20
@@ -75,7 +78,7 @@ class Config:
         for name in ("llm_slot_wait_s", "llm_temperature"):  # 슬롯 대기 0 = 기다리지 않음. temperature nan 이면 요청마다 실패
             if not 0 <= getattr(self, name) < math.inf:
                 raise ValueError(f"{name.upper()}: 0 이상 유한한 값이어야 합니다 ({getattr(self, name)})")
-        for name in ("llm_max_tokens", "llm_max_concurrency"):  # 동시 0 이면 모든 답변이 슬롯 초과
+        for name in ("llm_max_tokens", "llm_max_concurrency", "embed_max_tokens"):  # 동시 0 이면 모든 답변이 슬롯 초과
             if getattr(self, name) < 1:
                 raise ValueError(f"{name.upper()}: 1 이상이어야 합니다 ({getattr(self, name)})")
         # 크기 값·모델이 아직 없음(설계 §4.4). 켜면 시작하지 않음

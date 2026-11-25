@@ -78,3 +78,21 @@ def test_non_finite_is_error(pos, bad):
     fake.create = poisoned
     with pytest.raises(ValueError):
         client.embed_query("q")
+
+
+def test_passages_over_the_token_limit_are_logged_not_blocked(kure, caplog):
+    fake = FakeOpenAI()
+    client = OpenAIEmbeddingClient("http://unused", "kure", 0.5, client=fake, tokenizer=kure, max_tokens=30)
+    texts = [embed_text("규정", None, None, "제1조", "짧음"), embed_text("규정", None, None, "제2조", "나" * 50)]
+    assert len(client.embed_passages(texts)) == 2  # 넘어도 보냄(서버가 자르지 않게 쪼개기가 막는 것, 3.4)
+    assert [r.getMessage() for r in caplog.records] == ["임베딩 입력이 30 토큰을 넘는 조각 1개"]  # 24 토큰짜리는 안 셈
+
+
+def test_count_embed_tokens_counts_the_prefix_like_the_spec(kure, tmp_path):
+    from rag_api.shared.embed_tokens import count_body_tokens, count_embed_tokens, load_tokenizer
+    assert count_embed_tokens(kure, "본문\n") == count_embed_tokens(kure, "본문") == len(kure.encode("passage: 본문").ids)
+    assert count_body_tokens(kure, "passage: 본문") == 5  # KURE-v3 tokenizer.json 은 특수 토큰을 붙이지 않음(후처리 special_tokens 비어 있음)
+    with pytest.raises(FileNotFoundError, match="EMBED_TOKENIZER_PATH"):
+        load_tokenizer(tmp_path / "없음.json")
+    with pytest.raises(FileNotFoundError):
+        load_tokenizer("")
