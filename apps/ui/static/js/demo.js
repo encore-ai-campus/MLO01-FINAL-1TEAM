@@ -55,13 +55,21 @@ const sourceCards = (() => {
         if (className) element.className = className;
         card.append(element);
       }
-      function renderSources(container, sources) {
+      function renderSources(container, sources, linkToDocument = false) {
         renderTextCards(container,sources.filter(kind),"source-card",(card,source) => {
           card.dataset.source = kind(source);
           card.innerHTML = badge(source);
           appendText(card,"strong",source.title);
           appendText(card,"p",source.excerpt);
           if (kind(source) === "benchmark") appendText(card,"p","타사/타기관 참고 사례입니다","source-fixed-label");
+          if (linkToDocument) {
+            const link = document.createElement("a");
+            link.className = "source-link";
+            link.href = "#document";
+            link.dataset.docId = kind(source) === "template" ? "form" : "benchmark";
+            link.textContent = "원문 보기";
+            card.append(link);
+          }
         });
       }
       function renderNotices(container, items) {
@@ -93,11 +101,7 @@ const sourceCards = (() => {
     })();
     sourceCards.renderSources(document.getElementById("builder-benchmark"),[sourceCards.benchmark]);
 
-(() => {
-    const root = document.getElementById("question-desk-home");
-
-
-    const examples = {
+const qaExamples = {
       expense: {
         source_tier:1, doc_type:"official_policy",
         keywords:["출장", "정산", "영수증", "증빙", "경비"],
@@ -136,6 +140,9 @@ const sourceCards = (() => {
         owned:true
       }
     };
+  (() => {
+    const root = document.getElementById("question-desk-home");
+    const examples = qaExamples;
     const question = root.querySelector("#desk-question");
     const keyword = root.querySelector("#desk-keyword");
     const ownDepartment = root.querySelector("#desk-own");
@@ -151,55 +158,122 @@ const sourceCards = (() => {
     const sourceTitle = root.querySelector("#desk-source-title");
     const sourceExcerpt = root.querySelector("#desk-source-excerpt");
     const fullSource = root.querySelector("#desk-full-source");
+    const resultPanel = root.querySelector(".desk-result");
+    const retry = root.querySelector("#desk-retry");
+    const askSubmit = root.querySelector('[data-form="ask"] [type="submit"]');
+    const chips = [...root.querySelectorAll("[data-topic]")];
+    const feedbackPanel = root.querySelector("#desk-feedback");
+    const feedbackForm = root.querySelector("#desk-feedback-form");
+    const feedbackNotice = root.querySelector("#desk-feedback-notice");
+    const simulateFailure = new URLSearchParams(location.search).get("qa") === "fail";
     const modeButtons = [...root.querySelectorAll("[data-mode]")];
     const panels = {
       ask:root.querySelector("#desk-ask-panel"),
       search:root.querySelector("#desk-search-panel")
     };
 
-    function showResult(mode, query, topic) {
+    let activeMode = "ask";
+    let waiting;
+    let lastAnswer;
+    let answerContext;
+
+    function resetFeedbackForm() {
+      feedbackForm.reset();
+      feedbackNotice.textContent = "";
+    }
+    function setBusy(busy) {
+      question.readOnly = busy;
+      askSubmit.disabled = busy;
+      includeBenchmark.disabled = busy;
+      chips.forEach(chip => { chip.disabled = busy; });
+      question.form.setAttribute("aria-busy",String(busy));
+    }
+    function showResult(mode, query, topic, benchmarkSelected = false) {
       const isSearch = mode === "search";
+      const failed = !isSearch && simulateFailure;
       const asksTemplate = /공공|표준\s*양식/.test(query);
       const asksBenchmark = /외부\s*사례|벤치마크/.test(query);
       const externalQuery = asksTemplate || asksBenchmark;
-      const match = topic ? examples[topic] : (!isSearch && externalQuery ? undefined : Object.values(examples).find(example =>
-        (!isSearch || !ownDepartment.checked || example.owned) &&
-        example.keywords.some(word => query.includes(word))
-      ));
+      const matchId = topic || (!isSearch && externalQuery ? undefined : Object.keys(examples).find(key => {
+        const example = examples[key];
+        return (!isSearch || !ownDepartment.checked || example.owned) &&
+          example.keywords.some(word => query.includes(word));
+      }));
+      const match = examples[matchId];
       const response = {
-        sources: match ? [match] : (isSearch ? [] : [sourceCards.template,...(includeBenchmark.checked ? [sourceCards.benchmark] : [])]
+        sources: match ? [match] : (isSearch ? [] : [sourceCards.template,...(benchmarkSelected ? [sourceCards.benchmark] : [])]
           .filter(source => externalQuery
             ? (source === sourceCards.template ? asksTemplate : asksBenchmark)
             : sourceCards.matches(source,query))),
         notices:sourceCards.notices.filter(notice => sourceCards.matches(notice,query))
       };
       const external = match ? [] : response.sources;
-      if (external.length) {
+      if (external.length && !failed) {
         const material = sourceCards.kind(external[0]) === "template" ? "외부 공공 표준 양식" : "타사 참고 사례";
         response.header = "안내: 사내 공식 규정에 직접 일치하는 조항이 없어, " + material + "을 기준으로 안내합니다.";
       }
       sourceCards.renderHeader(banner,response.header,response.sources);
-      sourceCards.renderSources(externalSources,external);
+      if (failed && response.sources.length) {
+        banner.textContent = "답변을 생성하지 못했어요. 관련 원문을 발췌해 보여드려요.";
+        banner.hidden = false;
+      }
+      sourceCards.renderSources(externalSources,external,!isSearch);
       sourceCards.renderNotices(qaNotices,isSearch ? [] : response.notices);
       sourceCards.renderConflicts(qaConflicts,isSearch ? [] : response.sources);
       title.textContent = isSearch ? "문서 검색 결과" : "AI 답변";
       caption.textContent = query;
+      retry.hidden = isSearch || response.sources.length > 0;
+      feedbackPanel.hidden = isSearch || failed || !response.sources.length;
+      answerContext = feedbackPanel.hidden ? undefined : {query,source:match?.document ?? external.map(source => source.title).join(", ")};
       evidence.hidden = !match;
-      evidence.open = false;
-      fullSource.hidden = match !== examples.expense && match !== examples.purchase;
+      evidence.open = Boolean(failed && match);
+      fullSource.hidden = !match;
       if (!match) {
-        copy.textContent = external[0]?.excerpt ?? "질문에 답할 수 있는 문서를 찾지 못했어요. 질문을 바꿔 보세요.";
+        copy.textContent = external[0]?.excerpt ?? (isSearch ? "조건에 맞는 문서가 없어요." :
+          failed ? "답변을 생성하지 못했고 관련 문서도 없어요." : "질문에 답할 수 있는 문서를 찾지 못했어요.");
         return;
       }
       evidence.dataset.source = sourceCards.kind(match);
       root.querySelector("#desk-source-badge").innerHTML = sourceCards.badge(match);
       if (!fullSource.hidden) {
-        fullSource.dataset.docId = match === examples.expense ? "expense" : "purchase";
-        fullSource.textContent = (match === examples.expense ? "출장비 규정" : "구매 업무 세칙") + " 상세 열기";
+        fullSource.dataset.docId = matchId;
+        fullSource.textContent = match.document + " 상세 열기";
       }
-      copy.textContent = isSearch ? match.document : match.answer;
+      copy.textContent = isSearch ? match.document : failed ? match.excerpt : match.answer;
       sourceTitle.textContent = match.document;
       sourceExcerpt.textContent = match.excerpt;
+    }
+
+    function renderMode() {
+      const searchQuery = keyword.value.trim();
+      setBusy(Boolean(waiting));
+      if (activeMode === "search") {
+        resultPanel.hidden = !searchQuery;
+        if (searchQuery) showResult("search",searchQuery);
+        return;
+      }
+      resultPanel.hidden = !waiting && !lastAnswer;
+      if (waiting) {
+        title.textContent = "AI 답변";
+        caption.textContent = question.value;
+        copy.textContent = "답변을 준비하고 있어요.";
+        banner.hidden = evidence.hidden = retry.hidden = feedbackPanel.hidden = true;
+        [externalSources,qaNotices,qaConflicts].forEach(section => section.replaceChildren());
+      } else if (lastAnswer) {
+        showResult("ask",lastAnswer.query,lastAnswer.topic,lastAnswer.benchmarkSelected);
+      }
+    }
+    function submitQuestion(topic) {
+      const query = question.value.trim();
+      if (waiting || !query) return;
+      lastAnswer = {query,topic,benchmarkSelected:includeBenchmark.checked};
+      answerContext = undefined;
+      resetFeedbackForm();
+      waiting = setTimeout(() => {
+        waiting = undefined;
+        renderMode();
+      },700);
+      renderMode();
     }
 
     for (const button of modeButtons) {
@@ -210,43 +284,54 @@ const sourceCards = (() => {
           modeButton.setAttribute("aria-pressed", String(active));
           panels[modeButton.dataset.mode].hidden = !active;
         }
-        if (selected === "search" && keyword.value.trim()) {
-          showResult("search", keyword.value.trim());
-        } else if (selected === "search") {
-          showResult("search",ownDepartment.checked ? "내 부서" : "열람 가능 전체");
-          copy.textContent = "문서 이름이나 업무 용어를 입력해 보세요.";
-        } else {
-          const value = question.value.trim();
-          showResult("ask", value || examples.expense.question, value ? undefined : "expense");
-        }
+        activeMode = selected;
+        renderMode();
       });
     }
-    for (const chip of root.querySelectorAll("[data-topic]")) {
+    for (const chip of chips) {
       chip.addEventListener("click", () => {
+        if (waiting) return;
         const topic = chip.dataset.topic;
         question.value = chip.dataset.question || examples[topic].question;
-        showResult("ask", question.value, topic);
+        submitQuestion(topic);
       });
     }
-    for (const form of root.querySelectorAll("[data-form]")) {
-      form.addEventListener("submit", event => {
-        event.preventDefault();
-        const mode = form.dataset.form;
-        const input = mode === "ask" ? question : keyword;
-        const query = input.value.trim();
-        if (query) showResult(mode, query);
-      });
-    }
-    ownDepartment.addEventListener("change", () => {
-      const query = keyword.value.trim();
-      if (query) showResult("search", query);
-      else caption.textContent = ownDepartment.checked ? "내 부서" : "열람 가능 전체";
+    root.querySelector('[data-form="ask"]').addEventListener("submit",event => {
+      event.preventDefault();
+      submitQuestion();
     });
-    includeBenchmark.addEventListener("change", () => {
-      const value = question.value.trim();
-      if (value) showResult("ask",value);
+    ownDepartment.addEventListener("change",renderMode);
+    retry.addEventListener("click",() => {
+      question.focus();
+      question.select();
     });
-    showResult("ask",examples.expense.question,"expense");
+    root.querySelector("#desk-feedback-cancel").addEventListener("click",() => {
+      resetFeedbackForm();
+      feedbackForm.elements.type.focus();
+    });
+    feedbackForm.addEventListener("submit",event => {
+      event.preventDefault();
+      if (!answerContext || feedbackPanel.hidden) return;
+      const reason = feedbackForm.elements.reason.value.trim();
+      if (!reason) {
+        feedbackNotice.textContent = "사유를 입력해 주세요.";
+        feedbackForm.elements.reason.focus();
+        return;
+      }
+      root.dispatchEvent(new CustomEvent("desk-feedback-submit", {detail:{
+        ...answerContext,type:feedbackForm.elements.type.value,reason
+      }}));
+      feedbackForm.reset();
+      feedbackNotice.textContent = "피드백을 제출했어요.";
+    });
+    root.addEventListener("desk-session-end",() => {
+      clearTimeout(waiting);
+      waiting = lastAnswer = answerContext = undefined;
+      question.value = "";
+      includeBenchmark.checked = false;
+      resetFeedbackForm();
+      modeButtons.find(button => button.dataset.mode === "ask").click();
+    });
   })();
 
 (() => {
@@ -290,6 +375,21 @@ const sourceCards = (() => {
         extra:"한도 초과 시 사전 승인을 받는다.",
         nextTitle:"제4조 증빙", next:"구매 승인 내역과 증빙을 보관한다.",
         ontology_graph_meta:sourceCards.ontology_graph_meta
+      },
+      leave: {
+        title:"복무 규정", status:"현행", meta:"사내 규정 · 인사팀",
+        clause:"연차 신청", excerpt:qaExamples.leave.excerpt
+      },
+      approval: {
+        title:"위임전결 규정", status:"현행", meta:"사내 규정 · 경영운영팀",
+        clause:"결재 기준표", excerpt:qaExamples.approval.excerpt
+      },
+      benchmark: {
+        title:sourceCards.benchmark.title, meta:"외부 참고 사례",
+        clause:"출장비 정산 절차", excerpt:sourceCards.benchmark.excerpt
+      },
+      "restricted-travel": {
+        restricted:true
       }
     };
     const previousExpense = {
@@ -310,6 +410,10 @@ const sourceCards = (() => {
     const version = get("#qd-version");
     const citationPanel = get("#qd-citation-panel");
     const title = get("#qd-doc-title");
+    const emptyMessage = get("#qd-empty-message");
+    const clearFilters = get("#qd-clear-filters");
+    const missing = get("#qd-document-missing");
+    const documentBody = get(".qd-detail-grid");
     const detailFields = {
       title, meta:get("#qd-doc-meta"), priorTitle:get("#qd-prior-title"), prior:get("#qd-prior-text"),
       clause:get("#qd-clause-title"), excerpt:get("#qd-excerpt"), extra:get("#qd-clause-extra"),
@@ -337,14 +441,19 @@ const sourceCards = (() => {
       const total = response.results.length + response.benchmarks.length;
       const scope = own.checked ? "내 부서" : "열람 가능 전체";
       get("#qd-count").textContent = scope + " · " + total + "건";
+      const hasFilters = own.checked || includeBenchmark.checked;
       get(".qd-empty").hidden = total > 0 || response.reference_templates.length > 0;
+      clearFilters.hidden = !hasFilters;
+      emptyMessage.textContent = hasFilters
+        ? "조건에 맞는 문서가 없어요. 검색어를 바꾸거나 필터를 해제해 보세요."
+        : "조건에 맞는 문서가 없어요. 다른 검색어를 입력해 보세요.";
       sourceCards.renderSources(get("#qd-reference-templates"),response.reference_templates);
       sourceCards.renderSources(get("#qd-benchmark-results"),response.benchmarks);
       sourceCards.renderNotices(get("#qd-source-notices"),response.notices);
       sourceCards.renderConflicts(get("#qd-source-conflicts"),response.results);
     }
     function renderDocument(doc, highlight) {
-      for (const [field, element] of Object.entries(detailFields)) element.textContent = doc[field];
+      for (const [field, element] of Object.entries(detailFields)) element.textContent = doc[field] ?? "";
       const status = get("#qd-doc-status");
       status.textContent = doc.status;
       status.hidden = !doc.status;
@@ -353,16 +462,21 @@ const sourceCards = (() => {
       citationPanel.hidden = !highlight;
     }
     function showDocument(id, focus = true, notify = true) {
+      const doc = Object.hasOwn(documents,id) ? documents[id] : undefined;
+      const unavailable = !doc || doc.restricted;
       version.value = "current";
-      get("#qd-version-picker").hidden = id !== "expense";
-      renderDocument(documents[id],true);
-      for (const button of relatedButtons) button.hidden = button.dataset.related === id;
+      get("#qd-version-picker").hidden = unavailable || id !== "expense";
+      documentBody.hidden = unavailable;
+      missing.hidden = !unavailable;
+      renderDocument(unavailable ? {title:"문서를 찾을 수 없습니다"} : doc,!unavailable);
+      for (const button of relatedButtons) button.hidden = unavailable || button.dataset.related === id;
       searchView.hidden = true;
       documentView.hidden = false;
       if (focus) title.focus();
       if (notify) root.dispatchEvent(new CustomEvent("qd-route",{detail:{route:"document",id}}));
     }
     version.addEventListener("change", () => {
+      if (get("#qd-version-picker").hidden) return;
       const current = version.value === "current";
       renderDocument(current ? documents.expense : previousExpense,current);
     });
@@ -372,6 +486,11 @@ const sourceCards = (() => {
     });
     own.addEventListener("change", renderResults);
     includeBenchmark.addEventListener("change", renderResults);
+    clearFilters.addEventListener("click",() => {
+      own.checked = includeBenchmark.checked = false;
+      renderResults();
+      query.focus();
+    });
     for (const button of root.querySelectorAll("[data-doc]")) {
       button.addEventListener("click", () => {
         returnFocus = button;
@@ -527,19 +646,31 @@ const sourceCards = (() => {
     function cleanHomeUrl() {
       return location.href.split("#")[0];
     }
+    function routeHash(route) {
+      if (route === "home" || route === "auth") return "";
+      return route === "document" ? "#document/" + encodeURIComponent(docId) : "#" + route;
+    }
     function navigate(route, focus = true) {
       if (!canOpen(route)) return;
-      const hash = route === "home" ? "" : "#" + route;
+      const hash = routeHash(route);
       if (location.hash !== hash) history.pushState(null,"",hash || cleanHomeUrl());
       show(route,focus);
     }
     function restoreRoute(focus = true) {
-      const requested = location.hash.slice(1);
+      let requested = location.hash.slice(1);
+      if (requested.startsWith("document/")) {
+        try {
+          docId = decodeURIComponent(requested.slice("document/".length));
+        } catch {
+          docId = "";
+        }
+        requested = "document";
+      }
       let route = "auth";
       if (sessionRole) {
         route = canOpen(requested) ? requested : navGroups[sessionRole].links[0][0];
       }
-      const hash = route === "auth" || route === "home" ? "" : "#" + route;
+      const hash = routeHash(route);
       if (location.hash !== hash) history.replaceState(null,"",hash || cleanHomeUrl());
       show(route,focus);
     }
@@ -557,10 +688,12 @@ const sourceCards = (() => {
       const {route,id} = event.detail;
       if (id) docId = id;
       if (!canOpen(route)) return;
-      if (location.hash !== "#" + route) history.pushState(null,"","#" + route);
+      const hash = routeHash(route);
+      if (location.hash !== hash) history.pushState(null,"",hash || cleanHomeUrl());
       setNavigation(route);
     });
-    get('#question-desk-home [data-form="search"]').addEventListener("submit", () => {
+    get('#question-desk-home [data-form="search"]').addEventListener("submit", event => {
+      event.preventDefault();
       const keyword = get("#desk-keyword").value.trim();
       if (keyword) {
         get("#qd-query").value = keyword;
@@ -574,6 +707,7 @@ const sourceCards = (() => {
       return [...departments].filter(([,active]) => active).map(([department]) => department);
     }
     function showApplicationMode(mode) {
+      get("#signup-submit").textContent = applicationAccount()?.status === "보완 요청" ? "다시 제출" : "가입 신청";
       all("[data-application-mode]").forEach(control => control.setAttribute("aria-pressed",String(control.dataset.applicationMode === mode)));
       all("[data-application-panel]").forEach(panel => { panel.hidden = panel.dataset.applicationPanel !== mode; });
       if (mode === "status") renderApplication();
@@ -632,6 +766,8 @@ const sourceCards = (() => {
       openSession(role);
     }
     get("#logout").addEventListener("click",() => {
+      get("#question-desk-home").dispatchEvent(new Event("desk-session-end"));
+      docId = "expense";
       sessionRole = undefined;
       sessionEmail = undefined;
       sessionName = undefined;
@@ -712,11 +848,13 @@ const sourceCards = (() => {
         note("#application-notice","현재 계정의 신청 상태를 표시했습니다.");
         return;
       }
+      const resubmission = account.status === "보완 요청";
       Object.assign(account,{name,requested:input.get("department"),department:input.get("department"),employeeId:String(input.get("employeeId")).trim(),status:"승인 대기"});
+      delete account.revisionReason;
       selectedAccount = account.id;
       showApplicationMode("status");
       openSession("applicant");
-      note("#application-notice","가입 신청을 제출했습니다.");
+      note("#application-notice",resubmission ? "수정한 신청을 다시 제출했어요." : "가입 신청을 제출했어요.");
       renderAccounts();
     });
     get("#application-status").addEventListener("click",event => {
@@ -763,7 +901,15 @@ const sourceCards = (() => {
         account.grade = event.target.elements.grade.value;
         account.role = event.target.elements.role.value;
       }
-      if (action === "amend") account.revisionReason = event.target.elements.revisionReason.value.trim();
+      if (action === "amend") {
+        const reason = event.target.elements.revisionReason;
+        if (!reason.value.trim()) {
+          note("#account-detail .notice","보완 사유를 입력해 주세요.");
+          reason.focus();
+          return;
+        }
+        account.revisionReason = reason.value.trim();
+      }
       if (status) account.status = status;
       if (status || action === "save") {
         renderAccounts(action === "save" ? "계정 정보를 저장했습니다." : "계정 상태를 ‘" + status + "’으로 변경했습니다.");
@@ -783,8 +929,11 @@ const sourceCards = (() => {
       detail.innerHTML = '<div class="row row-between"><h2>' + escapeText(record.title) + '</h2>' + badge(record.status) + '</div>' +
         snapshot([["검수 사유",record.reason],["시행일",record.date],["추천 주관 부서",record.department],["열람 범위",record.access]]) +
         '<div class="compare"><div><h3>현행본</h3><p>' + escapeText(record.before || "신규 문서") + '</p></div><div><h3>검수 대상</h3><p>' + escapeText(record.after) + '</p></div></div>' +
-        (record.status === "검수 대기" ? '<form class="row" data-review-action>' + button("publish","승인·발행","btn-primary") + button("reject","반려","btn-danger") +
-          (record.id === draft?.id ? '<button class="btn" type="button" data-open-builder>사규 초안에서 열기</button>' : '') + '</form>' : '') +
+        (record.rejectionReason ? '<p class="state-note"><strong>반려 사유</strong> ' + escapeText(record.rejectionReason) + '</p>' : '') +
+        (record.status === "검수 대기" ? '<form class="form" data-review-action>' +
+          '<label>반려 사유 <input name="rejectionReason" maxlength="200" placeholder="반려할 때 입력해 주세요"></label>' +
+          '<div class="row">' + button("publish","승인·발행","btn-primary") + button("reject","반려","btn-danger") + '</div></form>' : '') +
+        (record === draft ? '<div><button class="btn" type="button" data-open-builder>사규 초안에서 열기</button></div>' : '') +
         '<p class="notice" aria-live="polite">' + escapeText(message) + '</p>';
     }
     get("#review-detail").addEventListener("submit",event => {
@@ -792,6 +941,15 @@ const sourceCards = (() => {
       const record = reviews.find(entry => entry.id === selectedReview);
       const action = event.submitter?.value;
       if (!record || record.status !== "검수 대기" || !["publish","reject"].includes(action)) return;
+      if (action === "reject") {
+        const reason = event.target.elements.rejectionReason;
+        if (!reason.value.trim()) {
+          note("#review-detail .notice","반려 사유를 입력해 주세요.");
+          reason.focus();
+          return;
+        }
+        record.rejectionReason = reason.value.trim();
+      }
       record.status = action === "publish" ? "승인·발행" : "반려";
       renderReview("문서를 ‘" + record.status + "’ 상태로 변경했습니다.");
       if (record === draft) note("#builder-notice", action === "publish" ? "초안이 검수에서 승인되었습니다." : "초안이 반려되었습니다. 본문을 수정해 다시 제출할 수 있습니다.");
@@ -813,6 +971,9 @@ const sourceCards = (() => {
       get("#draft-body").readOnly = locked;
       all("#builder-form input, #builder-form select, #builder-form button").forEach(control => { control.disabled = locked; });
       get("#draft-submit").disabled = locked;
+      get("#draft-submit").textContent = status === "반려" ? "다시 검수에 제출" : "검수에 제출";
+      get("#draft-rejection").hidden = status !== "반려" || !draft.rejectionReason;
+      note("#draft-rejection span",draft?.rejectionReason ?? "");
       get("#draft-review").hidden = !draft;
       get("#draft-new").hidden = status !== "승인·발행";
     }
@@ -825,6 +986,7 @@ const sourceCards = (() => {
       note("#builder-notice","초안을 생성했습니다. 제출 전에 문구를 확인해 주세요.");
     });
     get("#draft-submit").addEventListener("click",() => {
+      if (draft && draft.status !== "반려") return;
       const body = get("#draft-body").value.trim();
       const title = get("#builder-title").value.trim();
       const date = get("#builder-date").value;
@@ -832,13 +994,15 @@ const sourceCards = (() => {
         note("#builder-notice","문서 제목, 시행일, 초안 본문을 입력해 주세요.");
         return;
       }
+      const resubmission = draft?.status === "반려";
       if (!draft) {
         draft = {id:"draft-" + reviews.length,before:"",department:"경영운영팀",access:"전사",reason:"사규 초안 제출"};
         reviews.unshift(draft);
       }
-      Object.assign(draft,{title,date,after:body,status:"검수 대기"});
+      Object.assign(draft,{title,date,after:body,status:"검수 대기",reason:resubmission ? "수정한 사규 초안 재제출" : draft.reason});
+      delete draft.rejectionReason;
       selectedReview = draft.id;
-      note("#builder-notice","문서 검수 목록에 초안을 제출했습니다.");
+      note("#builder-notice",resubmission ? "수정한 초안을 검수에 다시 제출했어요." : "문서 검수 목록에 초안을 제출했어요.");
       renderReview();
       renderDraft();
     });
@@ -855,6 +1019,14 @@ const sourceCards = (() => {
       renderDraft();
     });
 
+    get("#question-desk-home").addEventListener("desk-feedback-submit",event => {
+      const {query,source,type,reason} = event.detail;
+      if (!canOpen("home") || !["오답 신고","규정 개정 요청"].includes(type)) return;
+      const id = "fb-submitted-" + feedback.length;
+      feedback.unshift({id,type,title:query,body:reason,source,status:"처리 대기"});
+      selectedFeedback = id;
+      renderFeedback();
+    });
     function renderFeedback(message = "") {
       const visible = feedback.filter(record => feedbackFilter === "all" || ["처리 대기","검토 중"].includes(record.status));
       const record = feedback.find(entry => entry.id === selectedFeedback);

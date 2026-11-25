@@ -51,15 +51,16 @@
           </div>
         </section>
       </section>
-      <section class="desk-result" aria-labelledby="desk-result-title">
+      <section class="desk-result" aria-labelledby="desk-result-title" hidden>
         <div class="desk-result-heading">
           <h2 id="desk-result-title">AI 답변</h2>
         </div>
         <div id="desk-source-banner" class="source-banner" role="status" hidden></div>
         <div class="desk-result-card">
           <div class="desk-response" aria-live="polite">
-            <p id="desk-result-caption" class="desk-response-caption">출장비 정산에 어떤 서류가 필요해요?</p>
-            <p id="desk-result-copy">출장비 정산 신청서에 지출 영수증을 첨부해 주세요.</p>
+            <p id="desk-result-caption" class="desk-response-caption"></p>
+            <p id="desk-result-copy"></p>
+            <button id="desk-retry" class="btn" type="button" hidden>다시 질문하기</button>
           </div>
           <details id="desk-evidence" class="desk-evidence">
             <summary>
@@ -74,6 +75,15 @@
         <div id="desk-related-sources" class="source-stack"></div>
         <div id="desk-source-notices" class="source-stack"></div>
         <div id="desk-source-conflicts" class="source-stack"></div>
+        <section id="desk-feedback" class="card" aria-labelledby="desk-feedback-title" hidden>
+          <h3 id="desk-feedback-title">답변 피드백</h3>
+          <form id="desk-feedback-form" class="form">
+            <label>유형 <select name="type"><option>오답 신고</option><option>규정 개정 요청</option></select></label>
+            <label>사유 <textarea name="reason" rows="3" maxlength="500" required></textarea></label>
+            <div class="row"><button class="btn btn-primary" type="submit">제출</button><button class="btn" id="desk-feedback-cancel" type="button">취소</button></div>
+          </form>
+          <p id="desk-feedback-notice" class="notice" role="status"></p>
+        </section>
       </section>
     </div>
   </div>

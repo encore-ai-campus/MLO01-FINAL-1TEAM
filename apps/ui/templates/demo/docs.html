@@ -56,7 +56,10 @@
               </button>
             </li>
           </ul>
-          <p class="qd-empty" hidden>조건에 맞는 문서가 없어요. 다른 검색어를 입력해 보세요.</p>
+          <div class="row qd-empty" hidden>
+            <p id="qd-empty-message" role="status"></p>
+            <button type="button" class="btn" id="qd-clear-filters" hidden>필터 해제</button>
+          </div>
           <div id="qd-reference-templates" class="source-stack"></div>
           <div id="qd-benchmark-results" class="source-stack"></div>
           <div id="qd-source-notices" class="source-stack"></div>
@@ -72,6 +75,7 @@
             <select id="qd-version"><option value="current">현행 · 2026.11.16</option><option value="previous">이전 · 2026.10.01</option></select>
           </label>
         </div>
+        <p id="qd-document-missing" class="qd-empty" hidden>검색 결과로 돌아가 다른 문서를 선택해 주세요.</p>
         <div class="qd-detail-grid">
           <article class="qd-paper" aria-label="문서 본문">
             <div class="qd-paper-top"><span><i data-lucide="file-text" aria-hidden="true">▤</i> 원문</span></div>

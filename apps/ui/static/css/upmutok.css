@@ -18,8 +18,6 @@
   #question-desk-home .desk-work, #question-desk-home .desk-result-card { min-width:0; border:1px solid var(--line); border-radius:15px; background:var(--sheet); }
   #question-desk-home .desk-work { display:grid; align-content:start; padding:clamp(10px,2.3vw,19px); gap:13px; box-shadow:0 4px 0 #f2d9ce; }
   #question-desk-home .desk-modes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; padding:4px; border-radius:10px; background:var(--blush); }
-  #question-desk-home button, #question-desk-home input { font:inherit; }
-  #question-desk-home button { color:var(--ink); cursor:pointer; }
   #question-desk-home .desk-modes button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:42px; padding:5px 4px; border:1px solid transparent; border-radius:7px; background:transparent; font-size:13px; font-weight:700; white-space:nowrap; }
   #question-desk-home .desk-mode-icon { display:block; width:16px; height:16px; flex:none; }
   @media (min-width:691px) {
@@ -86,8 +84,6 @@
   #qd-docs h1 { margin:0; color:inherit; font:700 clamp(29px,4.5vw,43px)/1.18 "Gowun Batang",Batang,serif; letter-spacing:-.045em; word-break:keep-all; overflow-wrap:anywhere; }
   #qd-docs h2 { margin:0; color:inherit; font-size:16px; font-weight:800; }
   #qd-docs p { margin:0; }
-  #qd-docs button, #qd-docs input { color:inherit; font:inherit; }
-  #qd-docs button, #qd-docs input[type="checkbox"] { cursor:pointer; }
   #qd-docs .qd-search-head, #qd-docs .qd-doc-head { display:grid; gap:12px; padding:clamp(18px,3.6vw,32px) clamp(14px,4.5vw,45px); background:var(--blush); }
   #qd-docs .qd-search-form { max-width:650px; }
   #qd-docs .qd-field { display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border:1px solid var(--line); border-radius:9px; background:var(--sheet); }
