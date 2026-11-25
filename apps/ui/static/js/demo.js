@@ -526,9 +526,8 @@ const qaExamples = {
       ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[character]
     );
     const navGroups = {
-      staff: {label:"직원", links:[["home","AI 질문"],["search","문서 검색"],["document","원문 상세"],["application","가입 신청·상태"]]},
-      applicant: {label:"신청자", links:[["application","가입 신청·상태"]]},
-      admin: {label:"관리자", links:[["accounts","계정·권한"],["review","문서 검수"],["builder","사규 초안"],["feedback","피드백"],["settings","운영 설정"]]}
+      staff: {label:"직원", links:[["home","AI 질문"],["search","문서 검색"],["document","원문 상세"]]},
+      admin: {label:"관리자", links:[["accounts","계정·권한"],["review","문서 검수"],["feedback","피드백"],["settings","운영 설정"]]}
     };
     const navRoot = get("#preview-navigation");
     const routes = new Set(Object.values(navGroups).flatMap(group => group.links.map(([route]) => route)));
@@ -591,7 +590,7 @@ const qaExamples = {
     let feedbackFilter = "open";
     let firstLoginAccount;
     let sessionRole;
-    let sessionEmail;
+    let verifiedApplicationEmail;
     let sessionName;
     let draft = null;
     let currentPack = "IT 서비스 팩";
@@ -611,10 +610,10 @@ const qaExamples = {
       '"><strong>' + escapeText(title) + '</strong>' + badge(status) + '<span class="small">' + escapeText(meta) + '</span></button>';
     const button = (name,label,classes = "") => '<button class="btn ' + classes + '" type="submit" name="action" value="' + name + '">' + label + '</button>';
     const note = (selector,message) => { get(selector).textContent = message; };
-    const canOpen = route => sessionRole && groupKeys(sessionRole).some(key =>
+    const canOpen = route => route === "builder" ? sessionRole === "admin" : sessionRole && groupKeys(sessionRole).some(key =>
       navGroups[key].links.some(([name]) => name === route)
     );
-    const applicationAccount = () => accounts.find(record => record.email.toLowerCase() === sessionEmail);
+    const findAccount = email => accounts.find(record => record.email.toLowerCase() === email);
 
     function setNavigation(route) {
       navRoot.querySelectorAll("[data-route]").forEach(link => {
@@ -627,16 +626,20 @@ const qaExamples = {
       }
     }
     function show(route, focus = true) {
-      const section = route === "search" || route === "document" ? "docs" : route;
+      const section = {search:"docs",document:"docs",builder:"review"}[route] ?? route;
       for (const screen of screens) screen.hidden = screen.dataset.screen !== section;
+      get("#review-overview").hidden = route === "builder";
+      get("#review-builder").hidden = route !== "builder";
       navRoot.hidden = !sessionRole;
       get("#logout").hidden = !sessionRole;
-      get(".masthead .dept").hidden = !sessionRole || sessionRole === "applicant";
-      setNavigation(route);
+      get(".masthead .dept").hidden = !sessionRole;
+      setNavigation(route === "builder" ? "review" : route);
       if (route === "search" || route === "document") {
         docsRoot.dispatchEvent(new CustomEvent("qd-show", {detail:{route,id:docId,focus}}));
       } else {
-        const heading = get('[data-screen="' + section + '"] h1');
+        const heading = section === "review"
+          ? get(route === "builder" ? "#review-builder h1" : "#review-overview h1")
+          : get('[data-screen="' + section + '"] h1');
         if (focus && heading) {
           heading.tabIndex = -1;
           heading.focus();
@@ -648,6 +651,7 @@ const qaExamples = {
     }
     function routeHash(route) {
       if (route === "home" || route === "auth") return "";
+      if (route === "builder") return "#review/draft";
       return route === "document" ? "#document/" + encodeURIComponent(docId) : "#" + route;
     }
     function navigate(route, focus = true) {
@@ -658,6 +662,7 @@ const qaExamples = {
     }
     function restoreRoute(focus = true) {
       let requested = location.hash.slice(1);
+      if (requested === "review/draft") requested = "builder";
       if (requested.startsWith("document/")) {
         try {
           docId = decodeURIComponent(requested.slice("document/".length));
@@ -706,18 +711,54 @@ const qaExamples = {
     function activeDepartmentOptions() {
       return [...departments].filter(([,active]) => active).map(([department]) => department);
     }
-    function showApplicationMode(mode) {
-      get("#signup-submit").textContent = applicationAccount()?.status === "보완 요청" ? "다시 제출" : "가입 신청";
-      all("[data-application-mode]").forEach(control => control.setAttribute("aria-pressed",String(control.dataset.applicationMode === mode)));
-      all("[data-application-panel]").forEach(panel => { panel.hidden = panel.dataset.applicationPanel !== mode; });
-      if (mode === "status") renderApplication();
+    const signupForm = get("#signup-form");
+    const verificationForm = get("#application-verification");
+    const statusPanel = get("#application-status");
+    const authViews = all("[data-auth-view]");
+    const authLinks = all("[data-auth-mode]");
+    const authCopy = {
+      login:["로그인","사내 계정으로 로그인하세요."],
+      signup:["가입 신청","사내 이메일과 희망 부서를 입력하세요."],
+      status:["신청 상태 확인","신청에 사용한 이메일과 비밀번호를 입력하세요."]
+    };
+    const demoPassword = "demo-password";
+    const demoRoles = new Map([["employee@example.com","staff"],["admin@example.com","admin"]]);
+    const normalizeEmail = value => value.trim().toLowerCase();
+
+    function showAuthMode(mode, focus = true) {
+      const [title, description] = authCopy[mode];
+      note("#auth-title",title);
+      note("#auth-description",mode === "status" && verifiedApplicationEmail ? "가입 신청 처리 상태를 확인하세요." : description);
+      authViews.forEach(view => { view.hidden = view.dataset.authView !== mode; });
+      authLinks.forEach(link => { link.hidden = link.dataset.authMode === mode; });
+      get("#application-notice").hidden = mode === "login";
+      verificationForm.hidden = Boolean(verifiedApplicationEmail);
+      statusPanel.hidden = !verifiedApplicationEmail;
+      if (focus) get("#auth-title").focus();
     }
-    function renderApplication() {
-      const account = applicationAccount();
-      if (!account) {
-        note("#application-status","제출한 가입 신청이 없습니다.");
-        return;
-      }
+    function beginAuthMode(mode, focus = true) {
+      verifiedApplicationEmail = undefined;
+      signupForm.reset();
+      signupForm.elements.email.readOnly = false;
+      note("#signup-submit","가입 신청");
+      renderSignupDepartments();
+      verificationForm.reset();
+      statusPanel.replaceChildren();
+      firstLoginAccount = undefined;
+      firstLoginNotice.hidden = true;
+      get("#first-login-privacy").open = false;
+      note("#auth-notice","");
+      note("#application-notice","");
+      showAuthMode(mode,focus);
+    }
+    function revealApplication(account, message = "") {
+      verifiedApplicationEmail = account.email.toLowerCase();
+      verificationForm.reset();
+      renderApplication(account);
+      showAuthMode("status");
+      note("#application-notice",message);
+    }
+    function renderApplication(account) {
       const statusDetails = {
         "승인 대기": '<p class="state-note">부서 관리자가 신청 내용을 검토 중입니다.</p><details class="auth-preview"><summary>공개 문서 보기</summary><p><strong>신입 업무 안내</strong></p><p>입사 첫날에는 사내 계정 발급 상태를 확인하고 부서 담당자에게 온보딩 일정을 문의해 주세요.</p></details>',
         "보완 요청": '<p class="state-note"><strong>보완 사유</strong> ' + escapeText(account.revisionReason || "신청 정보와 희망 부서를 다시 확인해 주세요.") + '</p><div><button type="button" class="btn btn-wide" id="amend-application">신청 정보 수정·재제출</button></div>',
@@ -725,7 +766,7 @@ const qaExamples = {
         "사용 중": '<p class="state-note">가입이 승인되었습니다.</p>',
         "차단": '<p class="state-note">계정이 차단되었습니다. 사내 계정 담당자에게 문의해 주세요.</p>'
       };
-      get("#application-status").innerHTML = '<div class="row row-between"><h2>가입 신청 상태</h2>' + badge(account.status) + '</div>' +
+      statusPanel.innerHTML = '<div class="row row-between"><h2>가입 신청 상태</h2>' + badge(account.status) + '</div>' +
         snapshot([["신청자",account.name],["희망 부서",account.requested]]) +
         (statusDetails[account.status] || '');
     }
@@ -735,10 +776,7 @@ const qaExamples = {
       select.innerHTML = options(activeDepartmentOptions());
       if (departments.get(current)) select.value = current;
     }
-    all("[data-application-mode]").forEach(control => control.addEventListener("click", () => {
-      showApplicationMode(control.dataset.applicationMode);
-      note("#application-notice","");
-    }));
+    authLinks.forEach(link => link.addEventListener("click", () => beginAuthMode(link.dataset.authMode)));
     const firstLoginNotice = get("#first-login-notice");
     const loginEmail = get("#login-email");
     function openSession(role) {
@@ -749,31 +787,17 @@ const qaExamples = {
       navigate(landing);
     }
     function finishLogin(email,role) {
-      sessionEmail = email;
-      const account = applicationAccount();
-      sessionName = account?.name ?? "이다온";
-      const form = get("#signup-form");
-      form.reset();
-      form.elements.email.value = email;
-      renderSignupDepartments();
-      if (account) {
-        form.elements.displayName.value = account.name;
-        form.elements.employeeId.value = account.employeeId;
-        if (departments.get(account.requested)) form.elements.department.value = account.requested;
-      }
-      note("#application-notice","");
-      showApplicationMode(account ? "status" : "signup");
+      sessionName = findAccount(email)?.name ?? "이다온";
+      beginAuthMode("login",false);
       openSession(role);
     }
     get("#logout").addEventListener("click",() => {
       get("#question-desk-home").dispatchEvent(new Event("desk-session-end"));
       docId = "expense";
       sessionRole = undefined;
-      sessionEmail = undefined;
       sessionName = undefined;
       navRoot.replaceChildren();
-      note("#application-status","");
-      note("#auth-notice","");
+      beginAuthMode("login",false);
       get(".brand").href = "#home";
       history.replaceState(null,"",cleanHomeUrl());
       show("auth");
@@ -784,21 +808,30 @@ const qaExamples = {
     });
     get("#login-form").addEventListener("submit",event => {
       event.preventDefault();
-      const enteredEmail = loginEmail.value.trim().toLowerCase();
+      const enteredEmail = normalizeEmail(loginEmail.value);
       const email = enteredEmail === "demo@example.com" ? "employee@example.com" : enteredEmail;
-      if (event.currentTarget.elements.password.value !== "demo-password") {
+      if (event.currentTarget.elements.password.value !== demoPassword) {
         firstLoginAccount = undefined;
         firstLoginNotice.hidden = true;
         note("#auth-notice","비밀번호를 확인해 주세요.");
         return;
       }
-      const account = accounts.find(record => record.email.toLowerCase() === email);
+      const account = findAccount(email);
       if (account?.status === "차단") {
         note("#auth-notice","계정이 차단되었습니다. 사내 계정 담당자에게 문의해 주세요.");
         return;
       }
-      if (!account && !["employee@example.com","admin@example.com","newhire@example.com"].includes(email)) {
+      if (!account && email === "newhire@example.com") {
+        beginAuthMode("signup");
+        signupForm.elements.email.value = email;
+        return;
+      }
+      if (!account && !demoRoles.has(email)) {
         note("#auth-notice","입력한 이메일을 확인해 주세요.");
+        return;
+      }
+      if (account && account.status !== "사용 중") {
+        revealApplication(account);
         return;
       }
       if (account?.firstLogin) {
@@ -808,8 +841,7 @@ const qaExamples = {
         get("#first-login-privacy-link").focus();
         return;
       }
-      const role = account ? (account.status !== "사용 중" ? "applicant" : account.role === "ADMIN" ? "admin" : "staff")
-        : ({ "admin@example.com":"admin", "employee@example.com":"staff", "newhire@example.com":"applicant" })[email];
+      const role = account ? (account.role === "ADMIN" ? "admin" : "staff") : demoRoles.get(email);
       finishLogin(email,role);
     });
     get("#first-login-privacy-link").addEventListener("click",event => {
@@ -826,41 +858,59 @@ const qaExamples = {
       firstLoginNotice.hidden = true;
       finishLogin(email.toLowerCase(),role === "ADMIN" ? "admin" : "staff");
     });
-    get("#signup-form").addEventListener("submit",event => {
+    verificationForm.addEventListener("submit",event => {
       event.preventDefault();
-      if (!canOpen("application")) return;
-      if (sessionRole === "admin") {
-        note("#application-notice","관리자 계정은 가입 신청 없이 이용할 수 있습니다.");
+      if (sessionRole) return;
+      const {email,password} = verificationForm.elements;
+      const account = findAccount(normalizeEmail(email.value));
+      if (!account || password.value !== demoPassword) {
+        note("#application-notice","이메일과 비밀번호를 확인해 주세요.");
         return;
       }
-      const input = new FormData(event.currentTarget);
+      revealApplication(account);
+    });
+    signupForm.addEventListener("submit",event => {
+      event.preventDefault();
+      if (sessionRole) return;
+      const input = new FormData(signupForm);
       const name = String(input.get("displayName")).trim();
-      if (!name || !departments.get(input.get("department"))) {
+      const department = input.get("department");
+      const email = normalizeEmail(String(input.get("email")));
+      if (!name || !departments.get(department)) {
         note("#application-notice","이름과 사용 가능한 희망 부서를 입력해 주세요.");
         return;
       }
-      let account = applicationAccount();
-      if (!account) {
-        account = {id:"signup-" + accounts.length,email:sessionEmail,role:"NEW_HIRE",status:"가입 신청"};
-        accounts.unshift(account);
-      } else if (!["가입 신청","보완 요청"].includes(account.status)) {
-        showApplicationMode("status");
-        note("#application-notice","현재 계정의 신청 상태를 표시했습니다.");
+      let account = findAccount(email);
+      const resubmission = email === verifiedApplicationEmail && account?.status === "보완 요청";
+      if (!resubmission && (account || demoRoles.has(email) || email === "demo@example.com")) {
+        note("#application-notice","이미 등록된 이메일입니다. 신청 상태를 확인해 주세요.");
         return;
       }
-      const resubmission = account.status === "보완 요청";
-      Object.assign(account,{name,requested:input.get("department"),department:input.get("department"),employeeId:String(input.get("employeeId")).trim(),status:"승인 대기"});
+      if (!account) {
+        account = {id:"signup-" + accounts.length,email,role:"NEW_HIRE"};
+        accounts.unshift(account);
+      }
+      Object.assign(account,{name,requested:department,department,employeeId:String(input.get("employeeId")).trim(),status:"승인 대기"});
       delete account.revisionReason;
       selectedAccount = account.id;
-      showApplicationMode("status");
-      openSession("applicant");
-      note("#application-notice",resubmission ? "수정한 신청을 다시 제출했어요." : "가입 신청을 제출했어요.");
       renderAccounts();
+      revealApplication(account,resubmission ? "수정한 신청을 다시 제출했어요." : "가입 신청을 제출했어요.");
     });
-    get("#application-status").addEventListener("click",event => {
+    statusPanel.addEventListener("click",event => {
       if (event.target.id !== "amend-application") return;
-      showApplicationMode("signup");
-      get('#signup-form [name="displayName"]').focus();
+      const account = findAccount(verifiedApplicationEmail);
+      if (sessionRole || account?.status !== "보완 요청") return;
+      const {displayName,email,employeeId,department} = signupForm.elements;
+      displayName.value = account.name;
+      email.value = account.email;
+      email.readOnly = true;
+      employeeId.value = account.employeeId;
+      renderSignupDepartments();
+      department.value = departments.get(account.requested) ? account.requested : "";
+      note("#signup-submit","다시 제출");
+      note("#application-notice","");
+      showAuthMode("signup",false);
+      displayName.focus();
     });
 
     function renderAccounts(message = "") {
@@ -921,6 +971,12 @@ const qaExamples = {
       const record = reviews.find(entry => entry.id === selectedReview);
       note("#review-count",pending.length + "건");
       get("#review-list").innerHTML = pending.map(doc => item("review",doc.id,doc.title,doc.status,doc.reason + " · " + doc.date,selectedReview)).join("") || '<p class="small">검수 대기 문서가 없습니다.</p>';
+      const rejected = draft?.status === "반려";
+      get("#review-rejected").hidden = !rejected;
+      get("#review-rejected .item-list").innerHTML = rejected
+        ? item("review",draft.id,draft.title,draft.status,draft.date,selectedReview)
+        : "";
+      note("#review-create-draft",draft && draft.status !== "승인·발행" ? "초안 열기" : "초안 작성");
       const detail = get("#review-detail");
       if (!record) {
         detail.innerHTML = '<p>검수할 문서를 선택하세요.</p>';
@@ -933,7 +989,8 @@ const qaExamples = {
         (record.status === "검수 대기" ? '<form class="form" data-review-action>' +
           '<label>반려 사유 <input name="rejectionReason" maxlength="200" placeholder="반려할 때 입력해 주세요"></label>' +
           '<div class="row">' + button("publish","승인·발행","btn-primary") + button("reject","반려","btn-danger") + '</div></form>' : '') +
-        (record === draft ? '<div><button class="btn" type="button" data-open-builder>사규 초안에서 열기</button></div>' : '') +
+        (record === draft ? '<div><button class="btn" type="button" data-open-builder>' +
+          (record.status === "반려" ? "수정 후 재제출" : "초안 보기") + '</button></div>' : '') +
         '<p class="notice" aria-live="polite">' + escapeText(message) + '</p>';
     }
     get("#review-detail").addEventListener("submit",event => {
@@ -958,6 +1015,11 @@ const qaExamples = {
     get("#review-detail").addEventListener("click",event => {
       if (event.target.closest("[data-open-builder]")) navigate("builder");
     });
+    get("#review-create-draft").addEventListener("click",() => {
+      if (draft?.status === "승인·발행") get("#draft-new").click();
+      navigate("builder");
+    });
+    get("#review-builder-back").addEventListener("click",() => navigate("review"));
 
     function fillTemplate() {
       const template = templates[get("#builder-template").value];

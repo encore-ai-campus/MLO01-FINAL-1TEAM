@@ -197,6 +197,8 @@
     .login-mascot{position:absolute;inset-block-start:50%;inset-inline-start:50%;display:block;width:150%;max-width:none;height:auto;transform:translate(-50%,-50%)}
     .login-card .notice{margin:0}
     .login-actions{margin-block:16px 8px}
+    .login-links{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 16px;font-size:13px}
+    .login-link{border:0;background:none;color:var(--cocoa);padding:4px 0;text-decoration:underline;text-underline-offset:3px}
     .source-card{min-width:0;padding:10px 12px;border:1px solid #CBD5E1;border-radius:9px;font-size:13px;overflow-wrap:anywhere}
     .source-card strong{display:block;margin-block:4px 2px}
     #qd-docs .qd-result[data-source="official"],#question-desk-home .desk-evidence[data-source="official"],.source-card[data-source="official"]{background:#FFF;border:1px solid var(--line);border-inline-start:5px solid #1D4ED8}
@@ -221,8 +223,6 @@
     .split{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.25fr);gap:14px;align-items:start}
     .split > *{min-width:0}
     @media(min-width:681px){
-      [data-screen="application"] .split{align-items:stretch}
-      [data-screen="application"] .card{align-content:start}
     }
     .card{display:grid;gap:11px;padding:clamp(12px,2.4vw,20px);border:1px solid var(--line);border-radius:11px;background:var(--paper)}
     .card h2{font-size:18px}
