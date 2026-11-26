@@ -115,7 +115,14 @@ class Runtime:
                     "GH_PROMPT_DISABLED": "1"}
 
     def run(self, args, **kwargs):
-        return command(args, env=self.env, **kwargs)
+        env = self.env.copy()
+
+        if args[0] == "gh":
+            env["GH_TOKEN"] = (
+                self.app / "cd" / "gh-token"
+            ).read_text().strip()
+
+        return command(args, env=env, **kwargs)
 
     def candidate(self, approved):
         sha, digest = approved["sha"], approved["digest"]
