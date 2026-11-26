@@ -33,6 +33,7 @@ from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.knowledge_engine.types import RetrievalQuery
 from rag_api.settings import ontology
 from rag_api.shared.config import Config
+from rag_api.shared.current_version import today_kst
 from rag_api.shared.embedding import OpenAIEmbeddingClient
 from rag_api.shared.tokenize import tokenize_ko
 
@@ -96,6 +97,7 @@ async def main(out: Path) -> None:
     cases = yaml.safe_load(Path(os.environ["RAG_GOLDEN_QA"]).read_text(encoding="utf-8"))["cases"]
     pool, engine = await open_engine(cfg)
     stats = term_stats.current()
+    today = today_kst()  # 평가가 자정을 넘겨도 한 실행 안에서는 같은 날짜
 
     rows = []
     for case in cases:
@@ -104,7 +106,7 @@ async def main(out: Path) -> None:
                "pack": ctx.active_pack, "expected": case["expected_doc_ids"]}
         for strategy in ("hybrid", "graph_hybrid"):
             t = time.perf_counter()
-            res = await engine.retrieve(RetrievalQuery(case["query"], strategy=strategy), ctx)
+            res = await engine.retrieve(RetrievalQuery(case["query"], strategy=strategy), ctx, today=today)
             ms = (time.perf_counter() - t) * 1000
             docs = doc_order([c.chunk_id for c in res.chunks])
             key = "" if strategy == "hybrid" else "graph_"
@@ -125,7 +127,7 @@ async def main(out: Path) -> None:
                 cosine=None if cosine is None else round(cosine, 3),
                 insufficient=term_stats.insufficient(res, tokens, stats, cfg))  # qa 와 같은 판정 함수
         if case["id"] == "GQA-ACL-003":
-            row["discoverable_hints"] = [h.doc_id for h in await engine.discoverable_hints(case["query"], ctx)]
+            row["discoverable_hints"] = [h.doc_id for h in await engine.discoverable_hints(case["query"], ctx, today=today)]
         rows.append(row)
     await pool.close()
 

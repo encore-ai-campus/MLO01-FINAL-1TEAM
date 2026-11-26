@@ -41,6 +41,8 @@ def row(chunk_id, doc_id="D1", tier=1, lexemes=("지결",), **score):
             "title": "제목", "version_tag": "v1.0", "doc_type": "official_policy", "source_tier": tier,
             "dept_owner": "FIN", "effective_from": date(2026, 1, 1), "version_id": "ver-" + doc_id, **score}
 
+D1, D2 = date(2026, 12, 1), date(2026, 12, 2)  # 현행 판 조건의 오늘(시험 데이터에는 종료일이 없어 어느 날이든 같음)
+
 
 def cfg(**kw):
     return Config(database_url="x", **kw)
@@ -134,7 +136,7 @@ class Embedder:
 
 
 def run(eng, q, ctx=HR):
-    return asyncio.run(eng.retrieve(q, ctx))
+    return asyncio.run(eng.retrieve(q, ctx, today=D1))
 
 
 def test_retrieve_hybrid(monkeypatch):
@@ -204,7 +206,7 @@ def test_title_tokens_retokenized_when_fingerprint_changes(monkeypatch):
     바뀌는 제목 수의 합이 21, 개념마다 0~5)."""
     title = "부서 간 자료 요청 협조전 작성 지침"
     FakeChannels(monkeypatch, discoverable=[{"doc_id": "K", "title": title, "dept_name": "인프라", "dept_owner": "INF"}])
-    hints = lambda: [h.doc_id for h in asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).discoverable_hints("협조전", HR))]
+    hints = lambda: [h.doc_id for h in asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).discoverable_hints("협조전", HR, today=D1))]
     assert hints() == ["K"]  # 질의·제목 모두 협조·전
     use_dictionary(CONCEPTS + (Concept("CON-XX-904", "협조전", ("업무협조전",), (), "설명", "base"),), "v1.0:4")
     assert hints() == ["K"]  # 질의가 협조전 한 토큰. 제목도 다시 잘라야 맞음
@@ -278,12 +280,13 @@ def test_filter_graph_drops_invisible_refills_active_adds_source():
 
 def test_procedure_graph_reads_targets_once_without_current_condition(monkeypatch):
     ch = FakeChannels(monkeypatch, graph_meta={"SRC": GRAPH_META}, graph_targets=(VISIBLE, OWNERS))
-    items = asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).procedure_graph(["SRC", "NOPE"], HR))
+    items = asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).procedure_graph(["SRC", "NOPE"], HR, today=D1))
     assert items == [GraphItem("SRC", filter_graph("SRC", GRAPH_META, VISIBLE, OWNERS))]
     meta_where, (doc_ids,) = ch.calls["graph_meta"]
     assert "current_version_id" in meta_where.text and doc_ids == ["SRC", "NOPE"]  # 요청 문서는 현행·열람 조건
-    target_where, (target_ids,) = ch.calls["graph_targets"]
-    assert "current_version_id" not in target_where.text  # 현행 조건 없이
+    target_where, (target_ids, target_today) = ch.calls["graph_targets"]
+    assert "current_version_id" not in target_where.text  # 현행 조건 없이(is_active 만 현행 조건으로 다시 채움: today 를 받음)
+    assert isinstance(target_today, date)
     assert target_ids == ["A", "B", "F", "HIDDEN", "OLD"]  # 단계·서식·충돌 상대를 한 번에
 
 
@@ -300,13 +303,13 @@ TITLES = [{"doc_id": "D1", "title": "급여 지급 규정", "dept_name": "인사
 ])
 def test_discoverable_hints_only_for_active_non_admin(monkeypatch, who):
     ch = FakeChannels(monkeypatch, discoverable=TITLES)
-    assert asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).discoverable_hints("지출결의서 규정", who)) == []
+    assert asyncio.run(KnowledgeEngine(None, Embedder(), cfg()).discoverable_hints("지출결의서 규정", who, today=D1)) == []
     assert "discoverable" not in ch.calls
 
 
 def test_discoverable_hints_title_overlap_order_and_limit(monkeypatch):
     ch = FakeChannels(monkeypatch, discoverable=TITLES)
-    hints = asyncio.run(KnowledgeEngine(None, Embedder(), cfg(discover_hint_limit=2)).discoverable_hints("지출결의서 작성 규정", HR))
+    hints = asyncio.run(KnowledgeEngine(None, Embedder(), cfg(discover_hint_limit=2)).discoverable_hints("지출결의서 작성 규정", HR, today=D1))
     assert hints == [DiscoverHint("D2", "지출결의서 작성 규정", "재무·회계·세무", "FIN"), DiscoverHint("D1", "급여 지급 규정", "인사·노무", "HR")]
     assert "NOT (d.allowed_depts" in ch.calls["discoverable"][0].text  # acl.py 의 hidden_predicate
 
@@ -315,7 +318,7 @@ def test_discoverable_hints_widen_with_synonyms_even_when_expansion_off(monkeypa
     FakeChannels(monkeypatch, discoverable=TITLES)
     hints = lambda on, cap=20: asyncio.run(KnowledgeEngine(None, Embedder(), cfg(ontology_expansion_enabled=on,
                                                                                   ontology_expansion_max_tokens=cap))
-                                           .discoverable_hints("지결 기한", HR))
+                                           .discoverable_hints("지결 기한", HR, today=D1))
     assert [h.doc_id for h in hints(False)] == [h.doc_id for h in hints(True)] == ["D2"]  # 지결 → 지출결의서(스위치와 무관)
     assert hints(False, cap=0) == []  # 넓히는 토큰 수 상한은 ONTOLOGY_EXPANSION_MAX_TOKENS
 
@@ -351,3 +354,39 @@ def test_graph_channel_adds_seeds_then_neighbors_as_third_list(monkeypatch):
     ch = FakeChannels(monkeypatch, [row("A", doc_id="D1", bm25=2.0)], [], rep_rows=reps, graph_meta=metas)
     res = run(eng, RetrievalQuery("지결 기한"))  # hybrid 는 그래프를 읽지 않음
     assert "graph_meta" not in ch.calls and res.trace.graph_hits == 0
+
+
+# --- 현행 판 조건의 "오늘"(경계 계약 4.1): 부르는 쪽이 넘긴 값이 모든 SQL 조각에 들어감 ----------------------------------
+
+
+def test_every_engine_entry_passes_today_to_the_current_condition(monkeypatch):
+    ch = FakeChannels(monkeypatch, [row("A", bm25=1.0)], [row("B", distance=0.2)], rep_rows=[], graph_meta={}, discoverable=[])
+    eng = KnowledgeEngine(None, Embedder(), cfg())
+    asyncio.run(eng.retrieve(RetrievalQuery("지결"), HR, today=D1))
+    assert ch.calls["keyword"][0].args[0] == D1 and ch.calls["vector"][0].args[0] == D1  # 현행 조건이 맨 앞
+    monkeypatch.setattr(channels, "visible_docs", lambda pool, where: _record(ch, "visible", where))
+    asyncio.run(eng.visible_doc_ids(["A"], HR, today=D2))
+    asyncio.run(eng.hidden_doc_ids(["A"], HR, today=D2))
+    asyncio.run(eng.discoverable_hints("지결 협조전", HR, today=D2))
+    asyncio.run(eng.procedure_graph(["A"], HR, today=D2))
+    assert ch.calls["visible"].args[0] == D2 and ch.calls["discoverable"][0].args[0] == D2 and ch.calls["graph_meta"][0].args[0] == D2
+
+
+async def _record(ch, name, where):
+    ch.calls[name] = where
+    return set()
+
+
+@pytest.mark.parametrize("call", [
+    lambda e: e.retrieve(RetrievalQuery("지결"), HR),
+    lambda e: e.visible_doc_ids(["A"], HR),
+    lambda e: e.hidden_doc_ids(["A"], HR),
+    lambda e: e.discoverable_hints("지결", HR),
+    lambda e: e.procedure_graph(["A"], HR),
+    lambda e: e.unverified_doc_ids(["A"], HR),
+    lambda e: e.retrieve(RetrievalQuery("지결"), HR, D1),  # 키워드로만 받음(자리 인자로는 못 넘김)
+])
+def test_engine_entries_require_today_as_a_keyword(call):
+    """오늘(경계 계약 4.1)은 부르는 쪽이 요청마다 한 번 계산해 넘김: 기본값이 없어 빠뜨리면 TypeError(조용히 다른 날짜로 가지 않음)."""
+    with pytest.raises(TypeError):
+        call(KnowledgeEngine(None, Embedder(), cfg()))

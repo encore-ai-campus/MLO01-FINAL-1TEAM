@@ -9,13 +9,13 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 
 from pydantic import BaseModel
 
 from rag_api.audit import service as audit
 from rag_api.auth.context import AuthContext
-from rag_api.contracts.common import KST, Status, discoverable_notices, version_badge
+from rag_api.contracts.common import Status, discoverable_notices, version_badge
 from rag_api.contracts.qa import (Answered, ConflictClause, Evidence, Excerpt, FallbackExcerpts, GuideNotice,
                                   InsufficientEvidence, QARequest, ScheduledNotice, Sentence)
 from rag_api.knowledge_engine import term_stats
@@ -23,6 +23,7 @@ from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.knowledge_engine.types import RetrievalQuery, RetrievedChunk
 from rag_api.rules.values import Rules
 from rag_api.settings.departments import QADepartments
+from rag_api.shared.current_version import today_kst
 from rag_api.shared.llm import LLMClient, LLMFailed
 from rag_api.shared.tokenize import _FULLWIDTH, tokenize_ko
 
@@ -157,6 +158,7 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
     않고 대체 응답(LLM_UNAVAILABLE). `pool`·`ip` 는 감사 로그 ACL_DENIED 를 쓰는 데만이고 기본값이 없는 키워드 인수:
     부르는 쪽이 빠뜨려 감사가 조용히 빠지지 않게(재검토 N1). `pool=None` 이면 감사를 남기지 않음(평가 스크립트: 개발 DB 에
     감사 로그를 쓰지 않게, 검토 K2)를 부르는 쪽이 명시적으로 고름."""
+    today = today or today_kst()  # 현행 판 조건·배지가 같은 "오늘"을 씀(요청마다 한 번)
     analysis = analyze(req.question, rules, qa_depts.name_parts)
     # 개인·실시간 조회(근거 부족 응답)·개인 수치(답변)의 그룹웨어 안내. 메뉴별 처음 맞는 것, 없으면 일반 문구
     guide = next((t for p, t in rules.groupware_guides if p.search(req.question)), rules.groupware_guide_default)
@@ -164,7 +166,7 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
     async def discoverable() -> list:
         """존재 공개 안내(03B 3.3). 근거 부족·답변 모두, 근거 건수와 관계없이(7차 회신 2.3절). 대상 판정(ACTIVE 비ADMIN)·
         볼 수 없는 문서만은 엔진이 함. 대체 응답에도 붙임(LLM 이 죽어도 협조전 안내가 빠지지 않게, 백엔드 결정)."""
-        return discoverable_notices(await engine.discoverable_hints(req.question, ctx), departments, rules.cooperation_request)
+        return discoverable_notices(await engine.discoverable_hints(req.question, ctx, today=today), departments, rules.cooperation_request)
 
     async def insufficient(status: Status) -> InsufficientEvidence:
         """근거 부족 응답(03B 3.4): R3 문구 + 존재 공개 안내 + (개인·실시간 조회면) 그룹웨어 안내 + 주 부서 OJT 질문."""
@@ -177,11 +179,11 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
 
     doc_ids: tuple[str, ...] = ()
     if req.doc_ids:  # 고른 문서 안에서만(5-13). 볼 수 없거나 현행이 아닌 문서는 알리지 않고 뺌
-        visible = await engine.visible_doc_ids(req.doc_ids, ctx)
+        visible = await engine.visible_doc_ids(req.doc_ids, ctx, today=today)
         denied = [d for d in dict.fromkeys(req.doc_ids) if d not in visible]
         # 뺀 문서 중 현행·활성 팩인데 볼 수 없는 문서만 감사 로그 ACL_DENIED 한 줄씩(없는 ID·옛 문서는 거짓 기록이라 안 남김).
         # 응답에는 알리지 않음. 쓰지 못해도 답변은 진행(audit.try_record)
-        hidden = await engine.hidden_doc_ids(denied, ctx) if denied and pool is not None else []
+        hidden = await engine.hidden_doc_ids(denied, ctx, today=today) if denied and pool is not None else []
         for doc_id in hidden:
             await audit.try_record(pool, trace_id, "ACL_DENIED", ctx.user_id, None, {"doc_id": doc_id, "trace_id": trace_id}, ip)
         if not visible:  # 찾지 않고 근거 부족(03B 3.4 "볼 수 있는 문서가 없어서 근거가 없을 때도 같은 문구")
@@ -197,23 +199,23 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
     # R3 판정 토큰은 늘 이번 질문의 tokenize_ko(확장 토큰 아님). 재검색도 이번 질문으로 판정: 앞 질문 토큰까지 넣으면
     # 앞 질문이 덮는 몫만큼 덮음이 올라 막아야 할 질문이 통과함(1단계 검토: 처음 막힌 28문항 중 15문항)
     tokens = tokenize_ko(req.question)
-    res = await engine.retrieve(RetrievalQuery(req.question, strategy, doc_ids=doc_ids), ctx)
+    res = await engine.retrieve(RetrievalQuery(req.question, strategy, doc_ids=doc_ids), ctx, today=today)
     lacking = term_stats.insufficient(res, tokens, stats, cfg)
     if lacking and req.previous_query:  # 완화 재검색 1회: 앞 질문으로 검색어를 보충(없으면 같은 입력이라 다시 찾지 않음)
-        res = await engine.retrieve(RetrievalQuery(f"{req.previous_query} {req.question}", strategy, doc_ids=doc_ids), ctx)
+        res = await engine.retrieve(RetrievalQuery(f"{req.previous_query} {req.question}", strategy, doc_ids=doc_ids), ctx, today=today)
         lacking = term_stats.insufficient(res, tokens, stats, cfg)  # 코사인은 재검색 결과의 벡터 1위
     status = Status(degraded=res.status.degraded, reason_codes=list(res.status.reason_codes))
     if lacking:
         return await insufficient(status)
 
     evidence = select_evidence(res.chunks, cfg.qa_evidence_chunks)
-    today = today or datetime.now(KST).date()
+    stale = await engine.unverified_doc_ids([c.doc.doc_id for c in evidence], ctx, today=today)  # 낡은 문서 배지(4.11)
 
     async def fallback(code: str) -> FallbackExcerpts:
         """대체 응답(03B 3.5): 근거 상위 청크 원문 + 존재 공개 안내(답변과 같은 자리, 백엔드 결정) + LLM 코드."""
         return FallbackExcerpts(
             excerpts=[Excerpt(**dataclasses.asdict(c.doc), chunk_id=c.chunk_id, section_path=c.section_path, text=c.content,
-                              version_badge=version_badge(c.doc.effective_from, today)) for c in evidence],
+                              version_badge=version_badge(c.doc.effective_from, today, stale=c.doc.doc_id in stale)) for c in evidence],
             notices=await discoverable(),
             status=Status(degraded=True, reason_codes=[*status.reason_codes, code]), trace_id=trace_id)
 
@@ -224,7 +226,7 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
     # 병기 지시와 (인용 검증 뒤 남은 근거 문서의) 카드에 같이 씀
     owners = {c.doc.doc_id: c.doc.dept_owner for c in evidence}
     titles = {c.doc.doc_id: c.doc.title for c in evidence}
-    graph = {g.source_doc_id: g.meta.get("conflicts", []) for g in await engine.procedure_graph(list(owners), ctx)}
+    graph = {g.source_doc_id: g.meta.get("conflicts", []) for g in await engine.procedure_graph(list(owners), ctx, today=today)}
     base = {d for d in (ctx.dept_code, *ctx.extra_depts, *analysis.depts) if d}  # 기준 부서(qa.md §3 R2)
     # R1(7차 회신 1절 4절 2): 표준 양식이 근거에 있으면 공식 사규 우선 지시
     instructions = [rules.evidence_priority_instruction] if any(c.doc.source_tier != 1 for c in evidence) else []
@@ -265,6 +267,6 @@ async def answer(engine: KnowledgeEngine, llm: LLMClient | None, rules: Rules, d
                            dept_name=departments.get(c.doc.dept_owner, c.doc.dept_owner),
                            clause_label=clause_label(c.doc.title, c.section_path),
                            source_badge="official" if c.doc.source_tier == 1 else None,
-                           version_badge=version_badge(c.doc.effective_from, today)) for c in cited],
+                           version_badge=version_badge(c.doc.effective_from, today, stale=c.doc.doc_id in stale)) for c in cited],
         conflict_clauses=[ConflictClause.model_validate(c) for c in cards.values()],  # 엔진 안쪽 키(target_dept_owner)는 버림
         notices=notices, status=status, trace_id=trace_id)

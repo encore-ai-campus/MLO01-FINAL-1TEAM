@@ -41,6 +41,10 @@ class Config:
     snippet_chars: int = 200
     snippets_per_doc: int = 2
     reference_templates_max: int = 5
+    # 낡은 문서 배지 `unverified`(경계 계약 4.11): 기준 시각 + 점검 주기(달력 개월) < 오늘. 정관·기본 거버넌스는 긴 주기(chapter_id 가 아래 장이고 official_policy)
+    verify_interval_months: int = 6
+    verify_long_interval_months: int = 12
+    verify_long_interval_chapters: str = "ch01"  # 쉼표로 여럿
     # AI 답변(qa 계획 3.7)
     qa_evidence_chunks: int = 5  # 근거 후보 = retrieve 상위 청크 수. R2 "상위 근거 5개"와 같은 수
     # 답변 LLM(OpenAI 호환, qa 계획 3.5·3.7). 주소가 비면 LLM 없이 대체 응답(시험이 실수로 실제 서버에 닿지 않게)
@@ -68,6 +72,9 @@ class Config:
                 raise ValueError(f"{name.upper()}: 0~1 이어야 합니다 ({getattr(self, name)})")
         if not 0 < self.term_stats_refresh_s < math.inf:  # 0·음수면 통계 SQL 이 쉬지 않고 돌고, nan·inf 면 갱신이 안 됨
             raise ValueError(f"TERM_STATS_REFRESH_S: 0 보다 큰 유한한 값이어야 합니다 ({self.term_stats_refresh_s})")
+        for name in ("verify_interval_months", "verify_long_interval_months"):  # 0 이하면 모든 문서가 늘 낡음으로 나가거나 날짜가 거꾸로 감
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name.upper()}: 1 이상이어야 합니다 ({getattr(self, name)})")
         if self.llm_base_url and not self.llm_model:
             raise ValueError("LLM_MODEL: LLM_BASE_URL 이 있으면 모델 이름이 있어야 합니다")
         if not 0 < self.llm_timeout_s < math.inf:  # nan 이면 시간 상한이 걸리지 않음
@@ -83,6 +90,10 @@ class Config:
             raise ValueError("PROXIMITY_BOOST_ENABLED: 근접성 보정 크기 값이 없어 켤 수 없습니다")
         if self.rerank_enabled:
             raise ValueError("RERANK_ENABLED: 재순위 모델이 없어 켤 수 없습니다")
+
+    @property
+    def long_interval_chapters(self) -> tuple[str, ...]:
+        return tuple(c.strip() for c in self.verify_long_interval_chapters.split(",") if c.strip())
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Config":

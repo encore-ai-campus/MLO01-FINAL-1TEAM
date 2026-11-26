@@ -49,7 +49,7 @@ class Evidence(BaseModel):
     version_id: UUID
     version_tag: str
     effective_from: date
-    version_badge: Literal["scheduled"] | None
+    version_badge: Literal["scheduled", "unverified"] | None
 
 
 class ConflictClause(BaseModel):
@@ -70,7 +70,7 @@ class Excerpt(BaseModel):
     section_path: str
     text: str
     effective_from: date
-    version_badge: Literal["scheduled"] | None
+    version_badge: Literal["scheduled", "unverified"] | None
 
 
 class Answered(BaseModel):

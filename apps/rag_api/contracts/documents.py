@@ -56,7 +56,7 @@ class DocumentResponse(BaseModel):
     effective_from: date
     effective_to: date | None
     is_current: bool
-    version_badge: Literal["scheduled", "previous"] | None
+    version_badge: Literal["scheduled", "previous", "unverified"] | None
     body: str
     location: Location | None
     versions: list[VersionItem]

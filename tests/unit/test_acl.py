@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -7,6 +7,9 @@ from rag_api.knowledge_engine.acl import (Sql, acl_predicate, active_packs, deni
                                          visible_predicate, visible_set)
 
 NOW = datetime(2026, 11, 21)
+TODAY = date(2026, 11, 25)
+# 현행 판 조건(shared.current_version.current_predicate): 종료일이 없거나 오늘 이후
+CUR = "d.current_version_id = v.version_id AND v.version_status = 'active' AND (v.effective_to IS NULL OR v.effective_to >= $?)"
 
 
 def ctx(principal="user", status=None, dept=None, extra=(), role=None, pack="it_service"):
@@ -38,13 +41,12 @@ def test_active_packs():
 
 
 def test_acl_predicate_shape():
-    p = acl_predicate(ctx(status="ACTIVE", dept="HR"), ["base", "it_service"])
-    assert p.text == ("d.current_version_id = v.version_id AND v.version_status = 'active'"
-                      " AND d.knowledge_pack = ANY($?::text[]) AND d.allowed_depts && $?::text[]")
-    assert p.args == (["base", "it_service"], ["PUBLIC", "ALL_EMP", "HR"])
-    admin = acl_predicate(ctx(status="ACTIVE", role="ADMIN"), ["base"], d="x", v="y")
-    assert admin.text == "x.current_version_id = y.version_id AND y.version_status = 'active' AND x.knowledge_pack = ANY($?::text[])"
-    assert admin.args == (["base"],)
+    p = acl_predicate(ctx(status="ACTIVE", dept="HR"), ["base", "it_service"], TODAY)
+    assert p.text == CUR + " AND d.knowledge_pack = ANY($?::text[]) AND d.allowed_depts && $?::text[]"
+    assert p.args == (TODAY, ["base", "it_service"], ["PUBLIC", "ALL_EMP", "HR"])
+    admin = acl_predicate(ctx(status="ACTIVE", role="ADMIN"), ["base"], TODAY, d="x", v="y")
+    assert admin.text == (CUR.replace("d.", "x.").replace("v.", "y.") + " AND x.knowledge_pack = ANY($?::text[])")
+    assert admin.args == (TODAY, ["base"])
 
 
 def test_render_numbers_fragments_and_named_slots_in_order():
@@ -74,14 +76,13 @@ def test_visible_predicate_has_no_current_condition():
 @pytest.mark.parametrize("c", [ctx("anonymous"), ctx(status="PENDING", dept="HR"), ctx(status="REVISION_REQ", dept="HR"),
                                ctx(status="REJECTED", dept="HR"), ctx("system"), ctx(status="ACTIVE", role="ADMIN")])
 def test_hidden_predicate_only_for_active_non_admin(c):
-    assert hidden_predicate(c, ["base"]) is None
+    assert hidden_predicate(c, ["base"], TODAY) is None
 
 
 def test_hidden_predicate_shape():
-    p = hidden_predicate(ctx(status="ACTIVE", dept="HR", extra=["FIN"]), ["base", "it_service"])
-    assert p.text == ("d.current_version_id = v.version_id AND v.version_status = 'active'"
-                      " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])")
-    assert p.args == (["base", "it_service"], ["PUBLIC", "ALL_EMP", "HR", "FIN"])
+    p = hidden_predicate(ctx(status="ACTIVE", dept="HR", extra=["FIN"]), ["base", "it_service"], TODAY)
+    assert p.text == CUR + " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])"
+    assert p.args == (TODAY, ["base", "it_service"], ["PUBLIC", "ALL_EMP", "HR", "FIN"])
 
 
 @pytest.mark.parametrize("c, depts", [
@@ -90,13 +91,13 @@ def test_hidden_predicate_shape():
     (ctx(status="ACTIVE", dept="HR"), ["PUBLIC", "ALL_EMP", "HR"])])
 def test_denied_predicate_covers_every_non_admin_requester(c, depts):
     """원문 보기의 거부 판정은 존재 공개 안내와 달리 비로그인·승인 전·system 도 "볼 수 없는 문서"를 가림. 안내 대상(ACTIVE)만 hidden 이 같은 조각."""
-    p = denied_predicate(c, ["base", "it_service"])
-    assert p.text == ("d.current_version_id = v.version_id AND v.version_status = 'active'"
-                      " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])")
-    assert p.args == (["base", "it_service"], depts)
-    assert (hidden_predicate(c, ["base", "it_service"]) == p) is (c.principal_type == "user" and c.status == "ACTIVE")
+    p = denied_predicate(c, ["base", "it_service"], TODAY)
+    assert p.text == CUR + " AND d.knowledge_pack = ANY($?::text[]) AND NOT (d.allowed_depts && $?::text[])"
+    assert p.args == (TODAY, ["base", "it_service"], depts)
+    assert (hidden_predicate(c, ["base", "it_service"], TODAY) == p) is (c.principal_type == "user" and c.status == "ACTIVE")
 
 
 def test_denied_predicate_is_none_for_admin_and_honors_aliases():
-    assert denied_predicate(ctx(status="ACTIVE", role="ADMIN"), ["base"]) is None
-    assert denied_predicate(ctx("anonymous"), ["base"], d="x", v="y").text.startswith("x.current_version_id = y.version_id AND y.version_status")
+    assert denied_predicate(ctx(status="ACTIVE", role="ADMIN"), ["base"], TODAY) is None
+    assert denied_predicate(ctx("anonymous"), ["base"], TODAY, d="x", v="y").text.startswith(
+        "x.current_version_id = y.version_id AND y.version_status = 'active' AND (y.effective_to IS NULL OR y.effective_to >= $?)")

@@ -30,12 +30,12 @@ from pathlib import Path
 import yaml
 from eval_retrieval import actor, load_meta, open_engine, visible
 
-from rag_api.contracts.common import KST
 from rag_api.contracts.qa import QARequest
 from rag_api.qa import service
 from rag_api.rules import values
 from rag_api.settings import departments
 from rag_api.shared.config import Config
+from rag_api.shared.current_version import KST
 from rag_api.shared.llm import LLMClient, LLMFailed
 from rag_api.shared.tokenize import tokenize_ko
 
