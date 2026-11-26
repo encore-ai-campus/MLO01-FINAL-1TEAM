@@ -19,7 +19,6 @@
 """
 import asyncio
 import os
-import re
 import sys
 import time
 from datetime import date
@@ -34,6 +33,7 @@ from rag_api.shared.config import Config
 from rag_api.shared.db import BM25_DDL
 from rag_api.shared.embedding import OpenAIEmbeddingClient, embed_text
 from rag_api.shared.tokenize import current_dict_version, tsv_source
+from rag_api.shared.version_header import FRONTMATTER, render_header
 
 BATCH = 32          # 계약 3.4 파이프라인 묶음
 EMBED_TIMEOUT_S = 30  # 계약 3.4 파이프라인 시간 제한(서버 질의의 EMBED_TIMEOUT_S 와 다름)
@@ -41,12 +41,6 @@ EMBED_TIMEOUT_S = 30  # 계약 3.4 파이프라인 시간 제한(서버 질의�
 
 def load_yaml(path: Path) -> list[dict]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n(.*)\Z", re.S)
-HEADER_KEYS = ("doc_id", "title", "doc_type", "source_tier", "knowledge_pack", "chapter_id", "chapter_name", "dept_owner",
-               "allowed_depts", "effective_from", "source_org", "source_url", "classification_method", "confidence_score",
-               "review_reason")  # 경계 계약 5.1 의 순서
 
 
 def read_body(path: Path) -> str:
@@ -64,11 +58,9 @@ def read_bodies(root: Path, docs: list[dict]) -> list[str]:
 def render_raw(row: dict, body: str) -> str:
     """`document_versions.raw_markdown`: 5.1 모양 머리말 + 본문. 머리말 값은 documents.yaml 의 그 버전 행(이전 판은 그 판의 allowed_depts).
     개발용이라 신뢰도·검수 사유는 고정값(수동 머리말 1.0, 없음)."""
-    meta = {k: (row.get(k) or None) if k in ("source_org", "source_url") else row.get(k) for k in HEADER_KEYS}
-    meta["confidence_score"] = 1.0 if row["classification_method"] == "manual_frontmatter" else None
-    meta["review_reason"] = None
-    head = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=None, width=10**6)
-    return f"---\n{head}---\n{body}"
+    meta = {**row, "source_org": row.get("source_org") or None, "source_url": row.get("source_url") or None, "review_reason": None,
+            "confidence_score": 1.0 if row["classification_method"] == "manual_frontmatter" else None}
+    return render_header(meta) + body
 
 
 async def create_db(dsn: str, reset: bool) -> None:
