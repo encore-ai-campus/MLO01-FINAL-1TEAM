@@ -1,7 +1,7 @@
 -- =============================================================================
 -- [MLO_01_FINAL] 정보지식플랫폼 PostgreSQL 17+ 통합 초기화 스크립트 (init.sql v1.12)
 -- 작성/관리: 역할 1 (PM · DBA 메인) / 관련 티켓: W1-R1-04A, W1-R1-04B, W1-R3-02B
--- 아키텍처 기준: 04_레이크하우스_및_DB_ERD_설계서.md (v1.12 · 100% 1:N 무조인 · HALFVEC 1024 · PG 17+)
+-- 아키텍처 기준: 04_레이크하우스_및_DB_ERD_설계서.md (v1.12 · 100% 1:N 무조인 · HALFVEC 1024 · PG 17+ · 11차 확정 반영)
 -- 특징:
 --   1. N:M 조인 테이블(document_acl, ontology_relations) 완전 제거 -> 100% 1:N 구조
 --   2. 4주차 코어 7개 테이블 + 8주차 확장 테이블(answer_feedbacks) 및 확장 컬럼 5종 선반영
@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS documents (
     ), -- 3단 공개 계층 단일 컬럼 통합(별도 is_open 컬럼 불필요): 1계층 PUBLIC(비로그인/미승인 공개: 회사소개서·팜플렛) | 2계층 ALL_EMP(승인 전직원 공개) | 3계층 개별 부서코드 (상호 배타 강제)
     classification_method VARCHAR(32) NOT NULL DEFAULT 'manual_frontmatter' CHECK (classification_method IN ('manual_frontmatter', 'auto_dict_rule')),
     needs_admin_review BOOLEAN NOT NULL DEFAULT FALSE,
+    review_reason VARCHAR(32) CHECK (review_reason IN ('LOW_CONFIDENCE', 'SENSITIVE_DEPT', 'QUARTERLY_OVERDUE')), -- [11차] 자동분류 대기 vs 분기점검 미확인 사유 구분
     is_discoverable BOOLEAN NOT NULL DEFAULT FALSE, -- 권한 외 사용자에게 제목/주관부서 존재 안내 노출 여부 (본문/청크는 무조건 차단)
     sync_quarter VARCHAR(16) NOT NULL DEFAULT '2026-Q4',
     last_verified_at TIMESTAMP, -- [회신 10차] 소관 부서 담당자(DEPT_MANAGER) 분기 유효 점검 확인 시각
@@ -145,7 +146,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
     snapshot_uri TEXT, -- [확장 컬럼 선반영] 사규 빌더 즉시 발행 시 Object Storage 백업 경로
     raw_markdown TEXT NOT NULL,
     content_hash VARCHAR(64) NOT NULL,
-    version_status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (version_status IN ('active', 'pending_review', 'archived')),
+    version_status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (version_status IN ('active', 'pending_review', 'archived', 'rejected')), -- [11차] 물리 DELETE 금지: 검수 반려·덮어쓰기 시 rejected 전환 (청크는 CASCADE 대신 명시 정리 또는 미게시 유지)
     effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
     effective_to DATE,
     source_org VARCHAR(128),

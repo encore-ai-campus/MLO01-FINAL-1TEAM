@@ -11,7 +11,7 @@ on:
       - '.github/workflows/app-ci.yml'
 
   push:
-    branches: [dev]
+    branches: [dev, 'infra/app-*']
     paths:
       - 'apps/rag_api/**'
       - 'apps/ui/**'
@@ -30,22 +30,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Validate Compose
-        run: |
-          cp infra/app/.env.example infra/app/.env
-          docker compose -f infra/app/compose.yml config --quiet
-
       - name: Build API image
         run: |
           docker build \
             -f infra/app/Dockerfile \
             -t rag-api:ci .
 
-      - name: Verify API import
-        run: |
-          docker run --rm --network none \
-            rag-api:ci \
-            python -c "from rag_api.main import app; print(app.title)"
+      - name: Validate Compose and image
+        run: bash infra/app/verify-image.sh rag-api:ci
 
-      - name: Verify UI resources when present
-        run: python infra/app/verify_ui_image.py rag-api:ci
+      - name: Verify pull deployment safety
+        run: python3 -m unittest discover -s infra/app/tests -v
+
+      - name: Rehearse with disposable PostgreSQL and RAG containers
+        run: bash infra/app/tests/rehearse-deploy.sh

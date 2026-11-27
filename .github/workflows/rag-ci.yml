@@ -48,3 +48,56 @@ jobs:
 
       - name: 시험 (DB 없이, unit·security)
         run: pytest -q
+
+  publish-app:
+    name: Publish tested RAG image
+    needs: unit-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: app-ghcr-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      IMAGE: ghcr.io/encore-ai-campus/mlo01-final-1team/rag-api
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Build and verify the release image
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f infra/app/Dockerfile -t "$IMAGE:sha-$GITHUB_SHA" .
+          bash infra/app/verify-image.sh "$IMAGE:sha-$GITHUB_SHA"
+      - name: Push verified image to GHCR
+        id: push
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          tag="$IMAGE:sha-$GITHUB_SHA"
+          docker push "$tag" | tee "$RUNNER_TEMP/push.log"
+          digest=$(sed -nE 's/.*digest: (sha256:[a-f0-9]{64}) size: [0-9]+$/\1/p' "$RUNNER_TEMP/push.log")
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest the pushed digest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Record SHA and digest for approval
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          printf 'Commit: `%s`\n\nImage: `%s@%s`\n' "$GITHUB_SHA" "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

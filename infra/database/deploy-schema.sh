@@ -17,7 +17,7 @@ deploy_dir=/opt/database
 container=rag-postgres
 database=rag_dev
 digest=sha256:c72b4cb8aaa0a52c0870c2b0a48173c595ee9bef0f3d8f92c3f546c69fef3567
-expected_sql=3caea68c626d17f81daeae397f1204bf52b30328465f6f5b1497d04fe9b97dea
+expected_sql=661b0b2f8af5c9c05eab0ebe5311dea02a5b2dda78f7ccf690a46064fd10e1f1
 docker=(docker --host unix:///var/run/docker.sock)
 
 db_exec() { "${docker[@]}" exec -i --user postgres "$container" "$@"; }
