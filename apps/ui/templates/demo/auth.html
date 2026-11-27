@@ -1,0 +1,23 @@
+<section class="screen card login-card" data-screen="auth">
+      <header class="login-heading">
+        <div><h1 class="frame-heading" tabindex="-1">로그인</h1><p>사내 계정으로 로그인하세요.</p></div>
+        <div class="login-mascot-frame">
+          <img class="login-mascot" src="{{ request.url_for('ui-static', path='images/cozy_1.png') }}" width="1536" height="1024" alt="">
+        </div>
+      </header>
+      <form class="form" id="login-form">
+        <label>사내 이메일 <input id="login-email" type="email" value="employee@example.com" required autocomplete="off"></label>
+        <label>비밀번호 <input name="password" type="password" value="demo-password" required autocomplete="off"></label>
+        <div id="first-login-notice" class="state-note stack" hidden>
+          <strong>관리자 발급 계정 첫 로그인</strong>
+          <p>서비스 이용 전 <a id="first-login-privacy-link" href="#first-login-privacy">개인정보 처리방침</a>을 확인해 주세요.</p>
+          <details id="first-login-privacy" class="auth-preview">
+            <summary>개인정보 처리방침 안내</summary>
+            <p>개인정보 처리에 관한 문의는 사내 담당자에게 연락해 주세요.</p>
+          </details>
+          <div><button id="first-login-continue" class="btn btn-primary btn-wide" type="button">계속</button></div>
+        </div>
+        <div class="row login-actions"><button class="btn btn-primary btn-wide" type="submit">로그인</button></div>
+      </form>
+      <p id="auth-notice" class="notice" aria-live="polite"></p>
+    </section>

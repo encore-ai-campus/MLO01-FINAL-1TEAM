@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>업무톡</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ request.url_for('ui-static', path='images/question-desk-favicon.png') }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=Noto+Sans+KR:wght@400;500;600;700;800&amp;display=swap">
+  <link rel="stylesheet" href="{{ request.url_for('ui-static', path='css/upmutok.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

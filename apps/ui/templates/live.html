@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{% block head %}
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"historyEnabled":false,"selfRequestsOnly":true}'>
+{% endblock %}
+{% block body %}
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="{{ request.url_for('ui-home') }}">
+      <img class="brand-logo" src="{{ request.url_for('ui-static', path='images/question-desk-mascot-logo.png') }}" width="38" height="38" alt="">
+      <span class="brand-copy"><span>업무톡</span><span class="brand-team">오피스 만렙들</span></span>
+    </a>
+    <a class="nav-link" href="{{ request.url_for('ui-demo') }}">화면 시연</a>
+  </div>
+</header>
+<main class="wrap" id="content">
+  <section class="screen">
+    <header class="screen-head">
+      <h1>업무 중에 궁금한 게 생겼나요?</h1>
+      <p>사내 규정과 업무 절차를 찾아보세요.</p>
+    </header>
+    <div class="screen-body split">
+      <section class="card">
+        <h2>문서 검색</h2>
+        <form class="form" method="post" action="{{ request.url_for('ui-search') }}"
+              hx-post="{{ request.url_for('ui-search') }}" hx-target="#ui-result" hx-sync="#ui-result:replace">
+          <label>검색어 <input name="query" maxlength="200" value="{{ query|default('') }}" required></label>
+          <label class="ui-check"><input type="checkbox" name="include_benchmark" value="true" {% if include_benchmark %}checked{% endif %}> 외부 사례 포함</label>
+          <button type="submit" class="btn btn-primary">검색</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>AI 질문</h2>
+        <form class="form" method="post" action="{{ request.url_for('ui-qa') }}"
+              hx-post="{{ request.url_for('ui-qa') }}" hx-target="#ui-result"
+              hx-sync="#ui-result:replace" hx-indicator="#qa-wait">
+          <label>질문 <input name="question" maxlength="500" required></label>
+          <button type="submit" class="btn btn-primary">질문하기</button>
+          <p class="ui-wait" id="qa-wait" role="status">답변을 준비하고 있어요.</p>
+        </form>
+      </section>
+      <div class="stack ui-result" id="ui-result" aria-live="polite">
+        {% if fragment != "live.html" %}{% include fragment %}{% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script defer src="{{ request.url_for('ui-static', path='js/htmx.min.js') }}"></script>
+<script defer src="{{ request.url_for('ui-static', path='js/ui.js') }}"></script>
+{% endblock %}

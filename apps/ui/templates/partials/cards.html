@@ -1,0 +1,40 @@
+{% macro source_badge(kind) -%}
+  {%- if kind == "official" -%}
+    <span class="source-badge" data-source="official">사내 공식 사규</span>
+  {%- elif kind == "template" -%}
+    <span class="source-badge" data-source="template"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg>공공 표준 양식 · 사내 규정 아님</span>
+  {%- elif kind == "benchmark" -%}
+    <span class="source-badge" data-source="benchmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 5h6v6m0-6-8 8m6 0v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h5"/></svg>외부 참고 사례 · 사내 규정 아님</span>
+  {%- elif kind == "external" -%}
+    <span class="source-badge" data-source="template">외부 자료 · 사내 규정 아님</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro document_link(source, chunk_id=None) -%}
+  {% set href = request.url_for('ui-document', doc_id=source.doc_id) %}
+  {% if source.version_tag is defined %}{% set href = href.include_query_params(version_tag=source.version_tag) %}{% endif %}
+  {% if chunk_id %}{% set href = href.include_query_params(chunk_id=chunk_id) %}{% endif %}
+  <a class="source-link" href="{{ href }}" hx-get="{{ href }}" hx-target="#ui-result" hx-sync="#ui-result:replace">{{ source.title }}</a>
+{%- endmacro %}
+
+{% macro notices(items) -%}
+  {%- for item in items %}
+    <aside class="source-notice">
+      {% if item.kind == "discoverable" %}
+        <strong>협조전 안내 · {{ item.title }}</strong>
+        <p>소관 부서 · {{ item.dept_name }}</p>
+      {% endif %}
+      <p>{{ item.text }}</p>
+    </aside>
+  {%- endfor %}
+{%- endmacro %}
+
+{% macro conflicts(pairs) -%}
+  {%- for pair in pairs %}
+    <aside class="source-conflict">
+      <strong>규정 충돌 · {{ pair.target_title }}</strong>
+      <p>{{ pair.clause_pair }}</p>
+      <p>{{ pair.priority_rule }}</p>
+    </aside>
+  {%- endfor %}
+{%- endmacro %}

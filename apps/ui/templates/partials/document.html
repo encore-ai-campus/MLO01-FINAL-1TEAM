@@ -1,0 +1,22 @@
+{% import "partials/cards.html" as cards with context %}
+{% set kind = {"official_policy":"official", "ojt_guide":"official", "standard_template":"template", "benchmark_reference":"benchmark"}.get(document.doc_type) %}
+<article class="card" aria-label="원문 상세">
+  <div class="row row-between"><h2>{{ document.title }}</h2>{{ cards.source_badge(kind) }}</div>
+  <p class="small">{{ document.dept_name }} · 시행 {{ document.effective_from }} · {{ document.version_tag }}</p>
+  {% if document.version_badge == 'previous' %}<p class="state-note">이전 버전 — 현행 아님</p>{% endif %}
+  {% if document.version_badge == 'scheduled' %}<p class="state-note">시행 예정</p>{% endif %}
+  {% if kind == "benchmark" %}<p class="source-fixed-label">타사/타기관 참고 사례입니다</p>{% endif %}
+  {% if document.versions|length > 1 %}
+    <nav class="row" aria-label="문서 버전">
+      {% for version in document.versions %}
+        {% set href = request.url_for('ui-document', doc_id=document.doc_id).include_query_params(version_tag=version.version_tag) %}
+        <a class="nav-link" href="{{ href }}" hx-get="{{ href }}" hx-target="#ui-result" hx-sync="#ui-result:replace"
+           {% if version.version_tag == document.version_tag %}aria-current="page"{% endif %}>{{ '현행' if version.is_current else '이전' }} · {{ version.effective_from }}</a>
+      {% endfor %}
+    </nav>
+  {% endif %}
+  {% if highlight %}<a class="source-link" href="#ui-citation">인용 위치</a>{% endif %}
+  {% if document.location and not document.location.found %}<p class="state-note">해당 인용 위치를 찾을 수 없어요.</p>{% endif %}
+  <div class="ui-document-body">{% if highlight %}{{ highlight[0] }}<mark id="ui-citation" tabindex="-1">{{ highlight[1] }}</mark>{{ highlight[2] }}{% else %}{{ document.body }}{% endif %}</div>
+  {% if document.workflow %}{{ cards.conflicts(document.workflow.conflicts) }}{% endif %}
+</article>

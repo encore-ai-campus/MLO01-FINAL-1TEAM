@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block body %}
+
+  <header class="masthead">
+    <div class="wrap">
+      <a class="brand" href="#home"><img class="brand-logo" src="{{ request.url_for('ui-static', path='images/question-desk-mascot-logo.png') }}" width="38" height="38" alt=""><span class="brand-copy"><span>업무톡</span><span class="brand-team">오피스 만렙들</span></span></a>
+      <div class="session"><span class="dept">경영운영팀</span><button type="button" class="btn" id="logout" hidden>로그아웃</button></div>
+    </div>
+  </header>
+  <nav class="wrap nav-wrap" id="preview-navigation" aria-label="주 메뉴" hidden></nav>
+  <main class="wrap" id="content">
+    {% include "demo/auth.html" %}
+{% include "demo/application.html" %}
+{% include "demo/home.html" %}
+{% include "demo/docs.html" %}
+{% include "demo/accounts.html" %}
+{% include "demo/review.html" %}
+{% include "demo/builder.html" %}
+{% include "demo/feedback.html" %}
+{% include "demo/settings.html" %}
+</main>
+
+{% endblock %}
+{% block scripts %}
+<script defer src="{{ request.url_for('ui-static', path='js/demo.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% import "partials/cards.html" as cards with context %}
+<section class="card" aria-label="검색 결과">
+  <div class="row row-between"><h2>검색 결과</h2><span class="small">{{ result.total }}건</span></div>
+  {% if result.status.degraded %}<p class="source-banner">일부 검색 기능에 제한이 있어 확인 가능한 결과를 표시합니다.</p>{% endif %}
+  {% for term in result.term_cards %}
+    <article class="source-card"><strong>{{ term.canonical_term }}</strong><p>{{ term.definition }}</p></article>
+  {% endfor %}
+  {% for group in (result.documents, result.reference_templates) %}
+    {% for hit in group %}
+      {% set kind = {"official_policy":"official", "ojt_guide":"official", "standard_template":"template", "benchmark_reference":"benchmark"}.get(hit.doc_type) %}
+      <article class="source-card" data-source="{{ kind }}">
+        {{ cards.source_badge(kind) }}
+        <strong>{{ hit.title }}</strong>
+        <p class="small">{{ hit.dept_name }} · 시행 {{ hit.effective_from }}{% if hit.version_badge %} · 시행 예정{% endif %}</p>
+        {% for snippet in hit.snippets %}<p>{{ snippet.text }}</p>{% endfor %}
+        {% if kind == "benchmark" %}<p class="source-fixed-label">타사/타기관 참고 사례입니다</p>{% endif %}
+        {{ cards.document_link(hit, hit.snippets[0].chunk_id if hit.snippets else none) }}
+      </article>
+    {% endfor %}
+  {% endfor %}
+  {% if not result.documents and not result.reference_templates and not result.term_cards %}<p>조건에 맞는 문서가 없어요.</p>{% endif %}
+  {{ cards.notices(result.notices) }}
+  {% if result.next_cursor %}
+    <form method="post" action="{{ request.url_for('ui-search') }}" hx-post="{{ request.url_for('ui-search') }}"
+          hx-target="#ui-result" hx-sync="#ui-result:replace">
+      <input type="hidden" name="query" value="{{ query }}">
+      <input type="hidden" name="cursor" value="{{ result.next_cursor }}">
+      {% if include_benchmark %}<input type="hidden" name="include_benchmark" value="true">{% endif %}
+      <button class="btn" type="submit">다음 결과</button>
+    </form>
+  {% endif %}
+</section>

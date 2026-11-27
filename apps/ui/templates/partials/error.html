@@ -1,0 +1,9 @@
+<section class="card" role="alert">
+  <h2>{{ '열람 안내' if error.code == 'ACL_DENIED' else '요청 안내' }}</h2>
+  <p>{{ error.message }}</p>
+  {% if error.code == "ACL_DENIED" and error.extra %}
+    {% if error.extra.dept_name %}<p>소관 부서 · {{ error.extra.dept_name }}</p>{% endif %}
+    {% if error.extra.text %}<p>{{ error.extra.text }}</p>{% endif %}
+  {% endif %}
+  {% if error.http_status >= 500 %}<p class="small">문의 번호 · {{ trace_id }}</p>{% endif %}
+</section>

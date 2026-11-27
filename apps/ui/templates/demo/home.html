@@ -1,0 +1,80 @@
+<section class="screen" data-screen="home" hidden><div id="question-desk-home" lang="ko">
+  <div class="desk-shell">
+    <div class="desk-content">
+      <section class="desk-hero" aria-labelledby="desk-title">
+        <div class="desk-intro">
+          <div class="desk-greeting">사내 업무 도우미</div>
+          <h1 id="desk-title"><span class="desk-title-line">업무 중에 궁금한 게</span> <span class="desk-title-line">생겼나요<span class="desk-title-accent">?</span></span></h1>
+          <p>사내 규정과 업무 절차를 물어보세요.<span class="desk-source-intro"><br class="desk-line-break"> 답변에 근거가 된 원문도 함께 보여드려요.</span></p>
+        </div>
+        <section class="desk-work" aria-label="사내 지식 검색과 질문">
+          <div class="desk-modes" role="group" aria-label="찾는 방법">
+            <button type="button" data-mode="ask" aria-pressed="true" aria-controls="desk-ask-panel"><svg class="desk-mode-icon" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#422A23" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M13 5H6a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h1v3l4-3h5a3 3 0 0 0 3-3v-2"/>
+  <path d="M8 13h5M18 2.75l1.05 3.2 3.2 1.05-3.2 1.05L18 11.25l-1.05-3.2L13.75 7l3.2-1.05L18 2.75Z"/>
+</svg> AI 질문</button>
+            <button type="button" data-mode="search" aria-pressed="false" aria-controls="desk-search-panel"><svg class="desk-mode-icon" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#422A23" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17 9V7l-4-4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5"/>
+  <path d="M13 3v4h4M8 10h4M8 14h2"/>
+  <circle cx="16" cy="15.5" r="3.5"/>
+  <path d="m18.5 18 2.5 2.5"/>
+</svg> 문서 검색</button>
+          </div>
+          <div id="desk-ask-panel">
+            <form class="desk-form" data-form="ask">
+              <label for="desk-question">무엇이 궁금하세요?</label>
+              <div class="desk-field">
+                <input id="desk-question" required placeholder="출장비 정산에 어떤 서류가 필요해요?">
+                <button type="submit" class="desk-submit">질문하기 <i data-lucide="arrow-up-right" aria-hidden="true">↗</i></button>
+              </div>
+            </form>
+            <label class="desk-filter"><input id="desk-qa-benchmark" type="checkbox"> 외부 사례 포함</label>
+            <div class="desk-suggestions" aria-label="경영운영팀 추천 질문">
+              <p>경영운영팀 추천 질문</p>
+              <div>
+                <button type="button" data-topic="expense">출장비 정산</button>
+                <button type="button" data-topic="leave">연차 신청</button>
+                <button type="button" data-topic="approval">결재선 확인</button>
+              </div>
+            </div>
+          </div>
+          <div id="desk-search-panel" hidden>
+            <form class="desk-form" data-form="search">
+              <label for="desk-keyword">문서·용어 바로 찾기</label>
+              <div class="desk-field">
+                <input id="desk-keyword" required placeholder="문서 제목 또는 업무 용어">
+                <button type="submit" class="desk-submit">검색 <svg class="desk-search-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m14.5 14.5 4 4"/></svg></button>
+              </div>
+              <label class="desk-filter"><input id="desk-own" type="checkbox"> 내 부서 문서만 보기</label>
+              <label class="desk-filter"><input id="desk-search-benchmark" type="checkbox"> 외부 사례 포함</label>
+            </form>
+          </div>
+        </section>
+      </section>
+      <section class="desk-result" aria-labelledby="desk-result-title">
+        <div class="desk-result-heading">
+          <h2 id="desk-result-title">AI 답변</h2>
+        </div>
+        <div id="desk-source-banner" class="source-banner" role="status" hidden></div>
+        <div class="desk-result-card">
+          <div class="desk-response" aria-live="polite">
+            <p id="desk-result-caption" class="desk-response-caption">출장비 정산에 어떤 서류가 필요해요?</p>
+            <p id="desk-result-copy">출장비 정산 신청서에 지출 영수증을 첨부해 주세요.</p>
+          </div>
+          <details id="desk-evidence" class="desk-evidence">
+            <summary>
+              <span class="desk-doc-icon"><i data-lucide="file-text" aria-hidden="true">▤</i></span>
+              <span><span id="desk-source-badge"></span><strong id="desk-source-title">출장비 규정 · 제4조</strong></span>
+              <span class="desk-open-label">원문 보기 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 4.5 3 3 3-3"/></svg></span>
+            </summary>
+            <blockquote><mark id="desk-source-excerpt">출장비 정산 신청 시 지출 영수증을 첨부한다.</mark></blockquote>
+            <a class="source-link" id="desk-full-source" href="#document" data-doc-id="expense">출장비 규정 상세 열기</a>
+          </details>
+        </div>
+        <div id="desk-related-sources" class="source-stack"></div>
+        <div id="desk-source-notices" class="source-stack"></div>
+        <div id="desk-source-conflicts" class="source-stack"></div>
+      </section>
+    </div>
+  </div>
+</div></section>
