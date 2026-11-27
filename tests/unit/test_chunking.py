@@ -1,6 +1,8 @@
 """공유 청킹 함수(경계 계약 5.3). 합성 원문으로 경계 사례를 봅니다. 길이는 글자 수 그대로 맞춰 경계 한 글자 차이를 가립니다.
 마지막 시험은 메인기획 정제 원문·조각 파일이 있을 때만 돕니다(환경 변수, 없으면 건너뜀. CI 는 건너뜀)."""
+import json
 import os
+import random
 import re
 from pathlib import Path
 
@@ -9,11 +11,18 @@ import yaml
 
 from rag_api.shared.chunking import chunk_markdown
 
+TOK = None
 META = {"doc_id": "T-DOC-001", "title": "시험 규정", "version_tag": "v1.0", "chapter_id": "ch01", "chapter_name": "시험 장"}
 
 
+@pytest.fixture(autouse=True)
+def _tok(kure):
+    global TOK
+    TOK = kure
+
+
 def chunks(body: str, **meta):
-    return chunk_markdown({**META, **meta}, body)
+    return chunk_markdown({**META, **meta}, body, TOK)
 
 
 def lens(cs):
@@ -46,7 +55,7 @@ def test_paths_without_chapter_or_clause_and_headings_that_are_not_split_points(
 
 
 def test_chunk_id_follows_version_tag_and_chapter_defaults_come_from_embed_text():
-    cs = chunk_markdown({"doc_id": "T-DOC-002", "title": "제목", "version_tag": "v2.3"}, "## 장\n본문")
+    cs = chunk_markdown({"doc_id": "T-DOC-002", "title": "제목", "version_tag": "v2.3"}, "## 장\n본문", TOK)
     assert cs[0].chunk_id == "T-DOC-002::v2.3::c001"
     assert cs[0].embed_text == "[제목 | ch00 공통·미분류 | 장]\n본문"
 
@@ -75,14 +84,17 @@ def test_units_in_different_chapters_never_merge_but_same_chapter_ones_do():
     (300, 219, True), (300, 220, False),  # 지금 단위 220 미만이면 합침
     (279, 597, True), (279, 598, False),  # 합쳐(+4) 880 이하
     (730, 149, True), (730, 150, False),  # 150 미만 꼬리는 상한이 1,050 으로 늘어남(150 이면 880 그대로)
-    (897, 149, True), (898, 149, False),  # 1,050 이하 / 1,051
+    (897, 149, True), (898, 149, False),  # 1,050 이하 / 1,051 (합친 뒤 880 을 넘으면 다시 나눔)
 ])
 def test_merge_boundaries(prev, cur, merged):
     cs = chunks(doc("가" * prev, "나" * cur))
+    paths = [c.section_path for c in cs]
     if merged:
-        assert [c.section_path for c in cs] == ["장 > 조0 & 조1"] and cs[0].content == "가" * prev + "\n\n" + "나" * cur
+        assert all(p.startswith("장 > 조0 & 조1") for p in paths)
+        if prev + cur + 4 <= 880:
+            assert cs[0].content == "가" * prev + "\n\n" + "나" * cur
     else:
-        assert [c.section_path for c in cs] == ["장 > 조0", "장 > 조1"] and lens(cs) == [prev, cur]
+        assert paths[0].startswith("장 > 조0") and paths[-1] == "장 > 조1" and not any("&" in p for p in paths)
 
 
 def test_over_880_splits_at_blank_line_paragraphs_and_continues_numbering():
@@ -107,17 +119,21 @@ def test_paragraphs_are_cut_of_surrounding_spaces_and_counting_restarts_after_a_
     cs = chunks(doc("가" * 500 + "\n\n  " + "나" * 500))
     assert [c.content for c in cs] == ["가" * 500, "나" * 500]
     cs = chunks(doc("가" * 400 + "\n\n" + table(12, 98) + "\n\n" + "나" * 400 + "\n\n" + "다" * 400))
-    assert lens(cs)[0] == 400 and lens(cs)[-1] == 400 + 2 + 400 and len(cs) == 4  # 가, 표 둘, 나+다
+    assert lens(cs) == [400, 1100, 110 + 2 + 400 + 2 + 400]  # 가, 표 앞 11행, 표 꼬리 1행(150 미만)이 뒤 나+다 앞에 붙음
+    assert cs[2].content.startswith("| a |\n|---|")
 
 
-def test_long_paragraph_without_blank_line_is_not_split():
-    assert lens(chunks(doc("가" * 2000))) == [2000]
-    assert lens(chunks(doc("가" * 1500 + "\n\n" + "나" * 100))) == [1500, 100]  # 꼬리는 150 미만이나 합치면 1,100 넘음
+def test_long_paragraph_without_blank_line_is_cut_at_880_characters():
+    assert lens(chunks(doc("가" * 2000))) == [880, 880, 240]  # 줄·문장·공백 경계가 없으면 글자로
+    assert lens(chunks(doc("가" * 1500 + "\n\n" + "나" * 100))) == [880, 620 + 2 + 100]
+    (c,) = chunks(doc("첫 줄입니다.\n" + "가" * 500 + "\n" + "나" * 300))  # 줄 경계로 자르고 줄바꿈으로 다시 묶음
+    assert c.content == "첫 줄입니다.\n" + "가" * 500 + "\n" + "나" * 300
+    cs = chunks(doc("가" * 500 + "\n" + "나" * 500))
+    assert [c.content for c in cs] == ["가" * 500, "나" * 500]
 
 
 @pytest.mark.parametrize("b, c, merged", [
     (800, 149, True), (800, 150, False),  # 나눈 마지막 글 문단이 150 미만이면 앞 조각에 붙음
-    (949, 149, True), (950, 149, False),  # 합쳐(+2) 1,100 이하 / 1,101
 ])
 def test_orphan_tail_of_a_split_joins_the_previous_part(b, c, merged):
     cs = chunks(doc("가" * 800 + "\n\n" + "나" * b + "\n\n" + "다" * c))
@@ -126,12 +142,22 @@ def test_orphan_tail_of_a_split_joins_the_previous_part(b, c, merged):
     assert lens(cs) == ([800, b + 2 + c] if merged else [800, b, c])
 
 
-def test_orphan_tail_is_not_joined_to_or_as_a_table():
-    plain_tail = chunks(doc("가" * 998 + "\n\n" + "나" * 100))
-    assert lens(plain_tail) == [998 + 2 + 100]  # 글 꼬리는 붙음(1,100 이하)
-    assert lens(chunks(doc("가" * 998 + "\n\n|" + "나" * 99))) == [998, 100]  # 꼬리가 표면 같은 크기여도 안 붙음
-    assert lens(chunks(doc("가" * 900 + "\n\n" + "나" * 100))) == [900 + 2 + 100]
-    assert lens(chunks(doc("|" + "가" * 899 + "\n\n" + "나" * 100))) == [900, 100]  # 앞이 표면 안 붙음
+def test_short_part_joins_the_next_part_first_and_not_a_table_before_it_unless_tiny():
+    assert lens(chunks(doc("가" * 100 + "\n\n" + "나" * 800 + "\n\n" + "다" * 800))) == [100 + 2 + 800, 800]  # 다음 조각 앞에
+    assert lens(chunks(doc("가" * 800 + "\n\n" + "나" * 100))) == [800 + 2 + 100]  # 다음이 없으면 앞 조각 뒤에
+    assert lens(chunks(doc("|" + "가" * 799 + "\n\n" + "나" * 100))) == [800, 100]  # 앞이 표면 안 붙음
+    assert lens(chunks(doc("|" + "가" * 799 + "\n\n" + "나" * 39))) == [800 + 2 + 39]  # 40자 미만은 표 뒤에도 붙음
+
+
+def test_heading_only_part_is_joined_or_dropped():
+    cs = chunks(doc("가" * 875 + "\n\n#### 소제목\n\n" + "나" * 800))  # 875+2+8 > 880 이라 제목 줄만 한 조각이 됨
+    assert [c.content for c in cs] == ["가" * 875, "#### 소제목\n\n" + "나" * 800]  # 다음 조각 앞에 붙음
+
+
+def test_token_budget_splits_a_part_that_fits_in_characters():
+    (one,) = chunks(doc("가" * 880))  # 가 = 0.5 토큰
+    cs = chunks(doc("나" * 880 + "\n\n" + "다" * 149))  # 나·다 = 1 토큰. 꼬리가 붙어 1,030 토큰 → 예산 넘어 다시 나눔
+    assert lens(cs) == [880, 149] and all(len(TOK.encode("passage: " + c.embed_text).ids) <= 1024 for c in cs)
 
 
 def test_table_up_to_1100_stays_in_one_chunk_and_bigger_ones_split_by_row_with_header():
@@ -183,9 +209,68 @@ def test_chunk_markdown_matches_the_published_chunks_files():
         if path.name.lower() == "readme.md" or path.name.startswith((".", "_")) or not m:
             continue
         meta = {"version_tag": "v1.0", "chapter_id": "ch00", "chapter_name": "공통·미분류", **yaml.safe_load(m.group(1))}
-        got = [(c.chunk_id, c.section_path, c.content, c.embed_text) for c in chunk_markdown(meta, m.group(2).strip())]
+        got = [(c.chunk_id, c.section_path, c.content, c.embed_text) for c in chunk_markdown(meta, m.group(2).strip(), TOK)]
         exp = [tuple(c[k].rstrip("\n") for k in ("chunk_id", "section_path", "content", "embed_text"))
                for c in want.get(f"{meta['doc_id']}::{meta['version_tag']}", [])]
         assert got == exp, path.name
         seen += 1
     assert seen and seen == len(want)
+
+
+# --- 메인기획 조각 규격(tests/reference) 대조 ---
+
+def _ref_chunks(meta, body):
+    from reference import chunking_reference as ref
+    ref.set_tokenizer(TOK)
+    full = {**meta, "version_status": "active", "knowledge_pack": "", "dept_owner": "", "allowed_depts": [], "source_tier": 1}
+    return [(c["chunk_id"], c["section_path"], c["content"], c["embed_text"]) for c in ref.build_chunks_for_doc(full, body)]
+
+
+def _ours(meta, body):
+    return [(c.chunk_id, c.section_path, c.content, c.embed_text) for c in chunk_markdown(meta, body, TOK)]
+
+
+def test_dummy_samples_match_the_spec():
+    """메인기획 더미 7건(가상). 기대값은 규격 + 실제 토크나이저 결과(tests/fixtures/chunking_dummy.json 의 source 참고)."""
+    data = json.loads((Path(__file__).parent.parent / "fixtures" / "chunking_dummy.json").read_text(encoding="utf-8"))
+    for d in data["docs"]:
+        exp = [tuple(c[k] for k in ("chunk_id", "section_path", "content", "embed_text")) for c in d["expected"]]
+        assert _ours(d["meta"], d["body"]) == exp == _ref_chunks(d["meta"], d["body"]), d["meta"]["doc_id"]
+    law = next(d for d in data["docs"] if d["meta"]["doc_id"].startswith("LAW-API-"))
+    assert all("부칙" not in c["section_path"] for c in law["expected"]) and "## 부칙" in law["body"]
+    assert law["expected"][1]["content"].startswith("[상위 조문] 제1조(목적)")
+
+
+def _random_body(rng: random.Random) -> str:
+    words = ["연차", "휴가는", "신청서를", "제출한다.", "승인", "받아야", "합니다.", "다만", "부서장은", "예외를", "둘", "수", "있다.",
+             "Policy", "ERP-01", "1,000원", "(별표", "1)", "「규정」", "요."]
+    def sent(n):
+        return " ".join(rng.choice(words) for _ in range(n))
+    def para():
+        k = rng.random()
+        if k < 0.15:
+            rows = rng.randint(1, 60)
+            return "\n".join(["| 항목 | 기준 |", "|---|---|", *(f"| {sent(rng.randint(1, 8))} | {sent(rng.randint(1, 40))} |" for _ in range(rows))])
+        if k < 0.25:
+            return "#### " + sent(3)
+        if k < 0.35:
+            return "\n".join(f"  {i}. {sent(rng.randint(5, 40))}" for i in range(1, rng.randint(2, 30)))
+        if k < 0.42:
+            return "".join(rng.choice("가나다라마바사") for _ in range(rng.randint(500, 3000)))  # 공백 없는 긴 글
+        return sent(rng.choice([3, 10, 40, 120, 300, 700]))
+    out = []
+    for ch in range(rng.randint(1, 3)):
+        out.append(f"## 제{ch + 1}장 {sent(2)}" if rng.random() < 0.9 else "## 부칙")
+        for cl in range(rng.randint(1, 5)):
+            out.append(f"### 제{cl + 1}조 ({sent(1)})")
+            out.append("\n\n".join(para() for _ in range(rng.randint(1, 6))))
+    return "\n\n".join(out)
+
+
+@pytest.mark.parametrize("seed", range(300))
+def test_random_documents_match_the_spec(seed):
+    rng = random.Random(seed)
+    meta = {**META, "doc_id": "LAW-API-T-001" if seed % 3 == 0 else "T-DOC-001"}
+    body = _random_body(rng)
+    assert _ours(meta, body) == _ref_chunks(meta, body)
+    assert all(len(TOK.encode("passage: " + c[3]).ids) <= 1024 for c in _ours(meta, body))

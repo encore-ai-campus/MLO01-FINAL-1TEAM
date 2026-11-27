@@ -2,10 +2,14 @@
 
 접두어(`query: `·`passage: `)는 이 모듈에서만 붙입니다. 런타임 옵션(`input_type` 등)은 쓰지 않습니다.
 """
+import logging
 import math
 import unicodedata
 
 from openai import OpenAI
+from tokenizers import Tokenizer
+
+from rag_api.shared.embed_tokens import count_embed_tokens
 
 EMBED_DIM = 1024  # chunks.embedding HALFVEC(1024). 모델 출력 2,048 의 앞부분(MRL)
 
@@ -32,8 +36,11 @@ def _to_unit(vec: list[float]) -> list[float]:
 class OpenAIEmbeddingClient:
     """OpenAI 호환 `/v1/embeddings`(Ollama·vLLM). 실패·시간 초과는 예외로 올립니다(서버는 키워드로 줄임)."""
 
-    def __init__(self, base_url: str, model: str, timeout_s: float, api_key: str = "unused", client: OpenAI | None = None):
+    def __init__(self, base_url: str, model: str, timeout_s: float, api_key: str = "unused", client: OpenAI | None = None,
+                 tokenizer: Tokenizer | None = None, max_tokens: int = 1024):
+        """문서 조각을 임베딩하는 쪽(파이프라인·시드)은 `tokenizer` 를 넘겨 넣기 전 길이를 확인합니다(3.4). 질문만 임베딩하는 서버는 넘기지 않음."""
         self._model = model
+        self._tok, self._max_tokens = tokenizer, max_tokens
         # 재시도하지 않음: 서버는 바로 degraded 로, 파이프라인은 다음 실행에서 다시 함(3.4)
         self._client = client or OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=0)
 
@@ -49,5 +56,7 @@ class OpenAIEmbeddingClient:
         return self._embed(["query: " + unicodedata.normalize("NFC", text)])[0]
 
     def embed_passages(self, texts: list[str]) -> list[list[float]]:
-        """`texts` 는 `embed_text` 결과."""
+        """`texts` 는 `embed_text` 결과. 토크나이저가 있으면 상한을 넘는 조각 수를 기록만 함(막지 않음, 3.4)."""
+        if self._tok is not None and (over := sum(count_embed_tokens(self._tok, t) > self._max_tokens for t in texts)):
+            logging.getLogger(__name__).warning("임베딩 입력이 %d 토큰을 넘는 조각 %d개", self._max_tokens, over)
         return self._embed(["passage: " + t for t in texts]) if texts else []

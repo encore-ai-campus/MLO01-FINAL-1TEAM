@@ -56,7 +56,7 @@ def test_rule_and_app_values_default_to_current_and_read_env():
     *({"DATABASE_URL": "x", "LLM_TIMEOUT_S": v} for v in ("0", "-1", "nan", "inf")),   # 시간 상한은 0 보다 큰 유한값
     *({"DATABASE_URL": "x", name: v} for name in ("LLM_SLOT_WAIT_S", "LLM_TEMPERATURE")
       for v in ("-0.1", "-1", "nan", "inf")),                                         # 0 이상 유한값
-    *({"DATABASE_URL": "x", name: v} for name in ("LLM_MAX_TOKENS", "LLM_MAX_CONCURRENCY") for v in ("0", "-1")),
+    *({"DATABASE_URL": "x", name: v} for name in ("LLM_MAX_TOKENS", "LLM_MAX_CONCURRENCY", "EMBED_MAX_TOKENS") for v in ("0", "-1")),
 ])
 def test_rejected_at_start(env):
     with pytest.raises(ValueError):

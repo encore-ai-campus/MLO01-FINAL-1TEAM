@@ -32,6 +32,20 @@ jobs:
       - name: 의존성 설치
         run: pip install -r requirements.txt
 
+      # 쪼개기 시험이 쓰는 KURE-v3 토크나이저. 모델 파일이라 저장소에 두지 않고 고정 판을 받음(경계 계약 3.4)
+      - name: 토크나이저 캐시
+        uses: actions/cache@v4
+        with:
+          path: ~/kure-v3
+          key: kure-v3-tokenizer-5b0494e8
+
+      - name: 토크나이저 받기
+        run: |
+          mkdir -p ~/kure-v3
+          [ -f ~/kure-v3/tokenizer.json ] || curl -fsSL -o ~/kure-v3/tokenizer.json \
+            https://huggingface.co/nlpai-lab/KURE-v3/resolve/5b0494e801cd5cc21234012df1b83cfdb42b2065/tokenizer.json
+          echo "EMBED_TOKENIZER_PATH=$HOME/kure-v3/tokenizer.json" >> "$GITHUB_ENV"
+
       - name: 시험 (DB 없이, unit·security)
         run: pytest -q
 
