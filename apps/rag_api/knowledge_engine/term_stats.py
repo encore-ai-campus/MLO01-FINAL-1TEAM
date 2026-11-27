@@ -4,19 +4,24 @@
 """
 import math
 from dataclasses import dataclass
+from datetime import date
+
+from rag_api.shared.current_version import today_kst
 
 # 팩·열람과 관계없이 현행 청크 전체(BM25 통계와 같음). 응답에 내지 않고 판정에만 씀.
 # 한 문장이라 N 과 df 가 같은 스냅샷. 단어가 하나도 없어도 N 을 받도록 청크 수 쪽에 LEFT JOIN
+# 현행 조건은 shared.current_version.current_predicate 와 같음(종료일이 오늘 이전이면 뺌). `ts_stat` 안쪽 질의는 문자열이라
+# 값 자리를 못 써서 `{today}` 에 `date` 객체로 만든 글자(YYYY-MM-DD)를 넣음(사용자 입력 아님)
 TERM_STATS_SQL = """
 SELECT n.total, s.word, s.ndoc
 FROM (SELECT count(*) AS total
       FROM chunks c JOIN documents d ON d.current_version_id = c.version_id
                     JOIN document_versions v ON v.version_id = c.version_id
-      WHERE v.version_status = 'active') n
+      WHERE v.version_status = 'active' AND (v.effective_to IS NULL OR v.effective_to >= '{today}'::date)) n
 LEFT JOIN ts_stat($$
       SELECT c.tsv FROM chunks c JOIN documents d ON d.current_version_id = c.version_id
                                  JOIN document_versions v ON v.version_id = c.version_id
-      WHERE v.version_status = 'active'$$) s ON TRUE
+      WHERE v.version_status = 'active' AND (v.effective_to IS NULL OR v.effective_to >= '{today}'::date)$$) s ON TRUE
 """
 
 
@@ -68,8 +73,8 @@ def current() -> TermStats:
     return _current
 
 
-async def refresh(conn) -> None:
-    """현행 청크 전체의 통계를 다시 읽음."""
+async def refresh(conn, today: date | None = None) -> None:
+    """현행 청크 전체의 통계를 다시 읽음. "오늘"(한국 날짜)은 갱신할 때마다 새로 셈."""
     global _current
-    rows = await conn.fetch(TERM_STATS_SQL)
+    rows = await conn.fetch(TERM_STATS_SQL.replace("{today}", (today or today_kst()).isoformat()))
     _current = TermStats(rows[0]["total"], {r["word"]: r["ndoc"] for r in rows if r["word"] is not None})

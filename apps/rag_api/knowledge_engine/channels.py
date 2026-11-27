@@ -2,8 +2,10 @@
 검색 채널은 `{where}`(acl_predicate) 안에서 상위 K 개를 뽑습니다(뽑은 뒤 거르지 않음).
 값 자리 이름은 SQL 안의 글자(JSON 키 등)와 겹치지 않게 짓습니다(`render` 는 따옴표 안도 바꿈)."""
 import json
+from datetime import date
 
 from rag_api.knowledge_engine.acl import Sql, render
+from rag_api.shared.current_version import current_predicate
 
 # 지난 실측과 같은 모양(계획 3.4 4번). `<@>` 는 BM25 의 음수라 오름차순이 잘 맞는 순서
 KEYWORD_SQL = """
@@ -64,9 +66,10 @@ FROM documents d JOIN document_versions v ON v.version_id = d.current_version_id
 WHERE {where} AND d.doc_id = ANY({doc_ids}::text[])
 """
 
-# 그래프가 가리키는 문서. `{where}` 는 visible_predicate(현행 조건 없음): 볼 수 있는 폐기 문서도 남기고 is_active 를 다시 채움
+# 그래프가 가리키는 문서. `{where}` 는 visible_predicate(현행 조건 없음): 볼 수 있는 폐기 문서도 남기고 is_active 를 다시 채움.
+# `{current}` 는 현행 판 조건(종료일 지난 대상은 폐기로 보임. 포인터가 없으면 LEFT JOIN 의 NULL 이라 거짓)
 GRAPH_TARGETS_SQL = """
-SELECT d.doc_id, coalesce(v.version_status = 'active', false) AS is_active, d.dept_owner
+SELECT d.doc_id, coalesce({current}, false) AS is_active, d.dept_owner
 FROM documents d LEFT JOIN document_versions v ON v.version_id = d.current_version_id
 WHERE {where} AND d.doc_id = ANY({target_ids}::text[])
 """
@@ -109,8 +112,8 @@ async def graph_meta(pool, where: Sql, doc_ids: list[str]) -> dict[str, dict]:
     return {r["doc_id"]: json.loads(r["meta"]) for r in await _fetch(pool, GRAPH_META_SQL, where=where, doc_ids=doc_ids)}
 
 
-async def graph_targets(pool, visible: Sql, target_ids: list[str]) -> tuple[dict[str, bool], dict[str, str]]:
+async def graph_targets(pool, visible: Sql, target_ids: list[str], today: date) -> tuple[dict[str, bool], dict[str, str]]:
     """볼 수 있는 문서만: (문서 ID → 현행 포인터가 active 버전을 가리키는지, 문서 ID → 소관 부서).
     볼 수 없거나 없는 문서는 빠짐."""
-    rows = await _fetch(pool, GRAPH_TARGETS_SQL, where=visible, target_ids=target_ids)
+    rows = await _fetch(pool, GRAPH_TARGETS_SQL, current=current_predicate(today), where=visible, target_ids=target_ids)
     return {r["doc_id"]: r["is_active"] for r in rows}, {r["doc_id"]: r["dept_owner"] for r in rows}

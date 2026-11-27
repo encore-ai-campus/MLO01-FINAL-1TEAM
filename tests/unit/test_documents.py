@@ -41,22 +41,26 @@ HEAD = "---\ndoc_id: D\nallowed_depts: [{}]\n---\n# 제목\n"
 def version(tag, current=False, allowed="ALL_EMP", eff=date(2026, 1, 1), eff_to=None, head=None):
     return {"title": "문서 제목", "doc_type": "official_policy", "source_tier": 1, "dept_owner": "FIN",
             "version_id": uuid.uuid5(uuid.NAMESPACE_URL, tag), "version_tag": tag, "effective_from": eff, "effective_to": eff_to,
-            "is_current": current, "head": HEAD.format(allowed) if head is None else head}
+            "is_current": current, "head": HEAD.format(allowed) if head is None else head,
+            # 점검 기준(낡은 문서 배지): 오늘(TODAY)보다 6개월 안이라 낡지 않음
+            "last_verified_at": None, "current_created_at": datetime(2026, 11, 1)}
 
 
 class Pool:
     """VERSIONS_SQL → versions, BODY_SQL → bodies[version_id], DENIED_SQL → denied. 감사 INSERT 는 audit 에."""
     def __init__(self, versions=(), bodies=None, denied=None, chunk=None, audit_fail=False):
         self.versions, self.bodies, self.denied, self.chunk = list(versions), bodies or {}, denied, chunk
-        self.audit, self.audit_fail, self.sqls = [], audit_fail, []
+        self.audit, self.audit_fail, self.sqls, self.args = [], audit_fail, [], []
 
     async def fetch(self, sql, *args):
         self.sqls.append(sql)
+        self.args.append(args)
         assert "FROM documents d" in sql and "{" not in sql  # 문서를 읽는 SQL 은 모두 조각이 채워진 채로
         return self.versions
 
     async def fetchrow(self, sql, *args):
         self.sqls.append(sql)
+        self.args.append(args)
         if "is_discoverable" in sql:
             return self.denied
         version_id = args[-2]  # 값은 where 의 값들, doc_id, version_id, chunk_id 순
@@ -74,10 +78,11 @@ class Pool:
 
 class Engine:
     def __init__(self, graph=None):
-        self.graph, self.calls = graph, []
+        self.graph, self.calls, self.todays, self.cfg = graph, [], [], Config(database_url="x")
 
-    async def procedure_graph(self, doc_ids, ctx):
+    async def procedure_graph(self, doc_ids, ctx, *, today):
         self.calls.append(doc_ids)
+        self.todays.append(today)
         return [GraphItem(doc_ids[0], self.graph)] if self.graph else []
 
 
@@ -186,6 +191,34 @@ def test_current_view_shape():
     assert r.location is None and r.workflow is None and r.trace_id == "doc-test"
     assert [v.version_tag for v in r.versions] == ["v2.0"]  # FIN 은 HR 전용 옛 판을 못 엶: 선택기에도 없음
     assert "v1.0" not in r.model_dump_json()
+
+
+def test_current_view_badge_unverified_scheduled_wins_and_previous_stays_previous():
+    old_head = "---\nchapter_id: {}\nallowed_depts: [ALL_EMP]\n---\n# 제목\n"
+    stale = {"current_created_at": datetime(2025, 11, 1)}  # 게시한 지 6개월이 넘음
+    cur = {**version("v2.0", True), **stale}
+    assert view(Pool([cur], body_for(cur))).version_badge == "unverified"
+    cur = {**version("v2.0", True), **stale, "last_verified_at": datetime(2026, 11, 1)}  # 최근 확인
+    assert view(Pool([cur], body_for(cur))).version_badge is None
+    cur = {**version("v2.0", True, eff=date(2026, 12, 1)), **stale}  # 시행 예정이 앞섬
+    assert view(Pool([cur], body_for(cur))).version_badge == "scheduled"
+    cur = {**version("v2.0", True, head=old_head.format("ch01")), "current_created_at": datetime(2025, 12, 1)}  # 긴 주기(11개월 전)
+    assert view(Pool([cur], body_for(cur))).version_badge is None
+    cur = {**cur, "current_created_at": datetime(2025, 11, 1)}  # 13개월 전
+    assert view(Pool([cur], body_for(cur))).version_badge == "unverified"
+    cur, old = {**version("v2.0", True), **stale}, version("v1.0", eff_to=date(2026, 5, 31))
+    assert view(Pool([cur, old], body_for(cur, old)), version_tag="v1.0").version_badge == "previous"  # 이전 판은 그대로
+
+
+def test_one_today_goes_to_every_sql_and_the_graph_call():
+    """현행 조건·배지가 같은 "오늘"을 씀: 판 목록·본문 SQL 의 값 자리와 흐름도 호출에 모두 넘김(경계 계약 4.1)."""
+    cur = version("v2.0", True)
+    pool, engine = Pool([cur], body_for(cur)), Engine()
+    view(pool, engine=engine)
+    assert pool.args and all(TODAY in a for a in pool.args) and engine.todays == [TODAY]
+    pool = Pool(denied=denied())  # 거부 판정 SQL 도 같은 오늘
+    error(pool, c=ctx(dept="LGL"), doc_id="HR-1")
+    assert len(pool.args) == 2 and all(TODAY in a for a in pool.args)
 
 
 def test_older_version_opens_with_badge_and_header_check_per_requester():
@@ -300,7 +333,7 @@ def test_department_label_of_active_pack_wins_in_403():
 
 async def _deny_with(departments):
     with pytest.raises(ApiError) as e:
-        await service._deny(Pool(denied=denied()), FIN, departments, RULES, "HR-1", "doc-test", None)
+        await service._deny(Pool(denied=denied()), FIN, departments, RULES, "HR-1", "doc-test", None, TODAY)
     await service.drain()
     return e.value
 

@@ -57,7 +57,18 @@ def test_rule_and_app_values_default_to_current_and_read_env():
     *({"DATABASE_URL": "x", name: v} for name in ("LLM_SLOT_WAIT_S", "LLM_TEMPERATURE")
       for v in ("-0.1", "-1", "nan", "inf")),                                         # 0 이상 유한값
     *({"DATABASE_URL": "x", name: v} for name in ("LLM_MAX_TOKENS", "LLM_MAX_CONCURRENCY") for v in ("0", "-1")),
+    *({"DATABASE_URL": "x", name: v} for name in ("VERIFY_INTERVAL_MONTHS", "VERIFY_LONG_INTERVAL_MONTHS") for v in ("0", "-1")),  # 점검 주기 1개월 이상
 ])
 def test_rejected_at_start(env):
     with pytest.raises(ValueError):
         Config.from_env(env)
+
+
+def test_verify_interval_defaults_and_env():
+    """낡은 문서 배지의 점검 주기(경계 계약 4.11). 장은 쉼표로 여럿(공백 무시)."""
+    c = Config(database_url="x")
+    assert (c.verify_interval_months, c.verify_long_interval_months, c.verify_long_interval_chapters, c.long_interval_chapters) == (6, 12, "ch01", ("ch01",))
+    c = Config.from_env({"DATABASE_URL": "x", "VERIFY_INTERVAL_MONTHS": "3", "VERIFY_LONG_INTERVAL_MONTHS": "1",
+                         "VERIFY_LONG_INTERVAL_CHAPTERS": " ch01, ch02 ,,"})
+    assert (c.verify_interval_months, c.verify_long_interval_months, c.long_interval_chapters) == (3, 1, ("ch01", "ch02"))
+    assert Config(database_url="x", verify_long_interval_chapters="").long_interval_chapters == ()  # 비우면 긴 주기 없음

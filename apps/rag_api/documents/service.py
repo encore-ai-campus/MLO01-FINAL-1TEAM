@@ -11,11 +11,13 @@ from typing import NoReturn
 
 from rag_api.audit import service as audit
 from rag_api.auth.context import AuthContext
-from rag_api.contracts.common import KST, ApiError, version_badge
+from rag_api.contracts.common import ApiError, is_unverified, version_badge
 from rag_api.contracts.documents import DocumentResponse, Location, VersionItem, Workflow
 from rag_api.knowledge_engine.acl import acl_predicate, active_packs, denied_predicate, render, visible_set
 from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.rules.values import Rules
+from rag_api.shared.config import Config
+from rag_api.shared.current_version import today_kst
 from rag_api.shared.version_header import split_header
 
 AUDIT_CONCURRENCY = 4  # 동시에 쓰는 감사 줄 상한(DB 연결을 다 쓰지 않게)
@@ -25,11 +27,19 @@ HEAD_CHARS = 4096  # 판 목록에서 판마다 가져오는 본문 앞부분(�
 VERSIONS_SQL = """
 SELECT d.title, d.doc_type, d.source_tier, d.dept_owner,
        lv.version_id, lv.version_tag, lv.effective_from, lv.effective_to,
+       d.last_verified_at, v.created_at AS current_created_at,
        lv.version_id = d.current_version_id AS is_current, left(lv.raw_markdown, {head}) AS head
 FROM documents d JOIN document_versions v ON v.version_id = d.current_version_id
                  JOIN document_versions lv ON lv.doc_id = d.doc_id AND lv.version_status IN ('active', 'archived')
 WHERE {where} AND d.doc_id = {doc_id}
 ORDER BY is_current DESC, lv.effective_from DESC, lv.version_tag DESC
+"""
+
+# 응답에 낼 현행 문서의 점검 기준(`unverified` 배지, 경계 계약 4.11): 확인 시각·현행 판 게시 시각·현행 판 머리말(장). `{where}` 는 acl_predicate
+VERIFY_SQL = """
+SELECT d.doc_id, d.doc_type, d.last_verified_at, v.created_at, left(v.raw_markdown, {head}) AS head
+FROM documents d JOIN document_versions v ON v.version_id = d.current_version_id
+WHERE {where} AND d.doc_id = ANY({doc_ids}::text[])
 """
 
 # 고른 판의 원문과(있으면) 그 판의 조각. 문서 문을 다시 겸
@@ -109,6 +119,24 @@ def parse_chunk_id(chunk_id: str) -> tuple[str, str]:
     return m[1], m[2]
 
 
+def is_stale(doc_type: str, last_verified_at: datetime | None, created_at: datetime, head: str, today: date, cfg: Config) -> bool:
+    """낡은 문서인지(경계 계약 4.11). 기준 시각 = 확인 시각과 현행 판 게시 시각 중 늦은 쪽(없는 쪽은 뺌), 날짜로 비교.
+    긴 주기는 현행 판 머리말의 `chapter_id` 가 설정한 장이고 공식 사규일 때만. 머리말이 없거나 장을 읽을 수 없으면 짧은 주기.
+    ponytail: DB 의 TIMESTAMP 는 연결 시간대(한국)의 벽시계라 `.date()` 로 바로 봄."""
+    basis = max(t for t in (last_verified_at, created_at) if t is not None).date()
+    chapter = split_header(head)[0].get("chapter_id")
+    return is_unverified(basis, doc_type == "official_policy" and chapter in cfg.long_interval_chapters, today, cfg)
+
+
+async def stale_docs(pool, where, doc_ids: list[str], today: date, cfg: Config) -> set[str]:
+    """`doc_ids` 중 낡은 현행 문서(응답에 나갈 문서만 기본 키로 한 번에 읽음)."""
+    if not doc_ids:
+        return set()
+    sql, args = render(VERIFY_SQL, where=where, doc_ids=doc_ids, head=HEAD_CHARS)
+    return {r["doc_id"] for r in await pool.fetch(sql, *args)
+            if is_stale(r["doc_type"], r["last_verified_at"], r["created_at"], r["head"], today, cfg)}
+
+
 def header_allows(head: str, depts: list[str] | None) -> bool:
     """이전 버전의 머리말 `allowed_depts` 가 열람 집합과 겹치는지. None 은 전체(ADMIN). 읽을 수 없으면 닫힘."""
     if depts is None:
@@ -118,10 +146,10 @@ def header_allows(head: str, depts: list[str] | None) -> bool:
 
 
 async def _deny(pool, ctx: AuthContext, departments: dict[str, str], rules: Rules, doc_id: str, trace_id: str,
-                ip: str | None) -> NoReturn:
+                ip: str | None, today: date) -> NoReturn:
     """문서 문에서 걸림(설계 §2.3). 있는데 볼 수 없는 문서면 감사 ACL_DENIED 한 줄, 존재 공개 ∧ ACTIVE 계정이면 403, 아니면 404.
     없는 문서·현행이 아닌 문서·활성 팩 밖 문서는 감사 없이 404(거짓 기록 금지). 어느 경우든 같은 404 본문."""
-    denied = denied_predicate(ctx, active_packs(ctx, True))  # ADMIN 은 None
+    denied = denied_predicate(ctx, active_packs(ctx, True), today)  # ADMIN 은 None
     row = None
     if denied is not None:
         sql, args = render(DENIED_SQL, denied=denied, doc_id=doc_id)
@@ -147,11 +175,12 @@ async def view(engine: KnowledgeEngine, pool, departments: dict[str, str], rules
             raise ApiError(422, "VALIDATION_FAILED", "chunk_id: version_tag 와 다른 판의 조각입니다.")
         version_tag = chunk_tag
 
-    where = acl_predicate(ctx, active_packs(ctx, True))  # 벤치마크 팩 문서도 원문은 엶(계획 2절)
+    today = today or today_kst()  # 현행 판 조건·배지가 같은 "오늘"을 씀(요청마다 한 번)
+    where = acl_predicate(ctx, active_packs(ctx, True), today)  # 벤치마크 팩 문서도 원문은 엶(계획 2절)
     sql, args = render(VERSIONS_SQL, where=where, doc_id=doc_id, head=HEAD_CHARS)
     rows = await pool.fetch(sql, *args)
     if not rows:
-        await _deny(pool, ctx, departments, rules, doc_id, trace_id, ip)
+        await _deny(pool, ctx, departments, rules, doc_id, trace_id, ip, today)
 
     depts = visible_set(ctx)
     openable = [r for r in rows if r["is_current"] or header_allows(r["head"], depts)]  # 문서 문 + 이전 버전 머리말
@@ -175,11 +204,14 @@ async def view(engine: KnowledgeEngine, pool, departments: dict[str, str], rules
                             text=locate(body, body_row["content"]) if found else None)
 
     is_current = wanted["is_current"]
-    badge = version_badge(wanted["effective_from"], today or datetime.now(KST).date()) if is_current else "previous"
+    badge = "previous"  # 이전 판은 배지가 이것 하나
+    if is_current:
+        badge = version_badge(wanted["effective_from"], today, stale=is_stale(
+            wanted["doc_type"], wanted["last_verified_at"], wanted["current_created_at"], wanted["head"], today, engine.cfg))
 
     workflow = None
     if is_current:  # 흐름도는 문서의 현행 그래프라 현행 판을 볼 때만
-        graph = await engine.procedure_graph([doc_id], ctx)
+        graph = await engine.procedure_graph([doc_id], ctx, today=today)
         workflow = Workflow.model_validate(graph[0].meta) if graph else None
 
     owner: str = wanted["dept_owner"]

@@ -1,6 +1,7 @@
 """찾기 `retrieve`·존재 공개 안내·협업 그래프(설계 §3·§4·§5, 계획 3.4~3.6)."""
 import asyncio
 import logging
+from datetime import date
 from functools import lru_cache
 
 from rag_api.auth.context import AuthContext
@@ -118,10 +119,11 @@ class KnowledgeEngine:
     def __init__(self, pool, embedder, cfg: Config):
         self.pool, self.embedder, self.cfg = pool, embedder, cfg
 
-    async def retrieve(self, q: RetrievalQuery, ctx: AuthContext) -> RetrievalResult:
+    async def retrieve(self, q: RetrievalQuery, ctx: AuthContext, *, today: date) -> RetrievalResult:
+        """`today`(한국 날짜)는 현행 판 조건의 "오늘". 부르는 쪽이 요청마다 한 번 계산해 배지와 같은 값을 넘김(기본값 없음: 빠뜨리면 TypeError)."""
         cfg = self.cfg
         packs = active_packs(ctx, q.include_benchmark)
-        where = acl_predicate(ctx, packs)
+        where = acl_predicate(ctx, packs, today)
         if q.dept_filter:  # 필터는 열람 조건 위에 더함(범위를 넓히지 못함)
             where += Sql(" AND d.dept_owner = ANY($?::text[])", (list(q.dept_filter),))
         if q.doc_types:
@@ -187,25 +189,31 @@ class KnowledgeEngine:
         order = {d: i for i, d in enumerate(docs)}  # 씨앗(키워드·벡터 순) 다음 이웃(씨앗 순, 앞 → 뒤 단계). 이미 넣은 문서는 건너뜀
         return sorted(rows, key=lambda r: order[r["doc_id"]])
 
-    async def visible_doc_ids(self, doc_ids: list[str], ctx: AuthContext) -> list[str]:
+    async def visible_doc_ids(self, doc_ids: list[str], ctx: AuthContext, *, today: date) -> list[str]:
         """고른 문서 중 요청자가 볼 수 있는 현행 문서(활성 팩, 벤치마크 제외). 순서는 받은 대로."""
-        where = acl_predicate(ctx, active_packs(ctx, False)) + Sql(" AND d.doc_id = ANY($?::text[])", (doc_ids,))
+        where = acl_predicate(ctx, active_packs(ctx, False), today) + Sql(" AND d.doc_id = ANY($?::text[])", (doc_ids,))
         visible = await channels.visible_docs(self.pool, where)
         return [d for d in dict.fromkeys(doc_ids) if d in visible]
 
-    async def hidden_doc_ids(self, doc_ids: list[str], ctx: AuthContext) -> list[str]:
+    async def hidden_doc_ids(self, doc_ids: list[str], ctx: AuthContext, *, today: date) -> list[str]:
         """고른 문서 중 현행·활성 팩인데 요청자가 볼 수 없는 문서(약속서 00 4.2 "볼 수 없는 문서", 감사 ACL_DENIED 대상).
         없는 ID·현행이 아닌 문서·다른 팩 문서는 빠짐. user·ACTIVE·비ADMIN 이 아니면 빈 목록. 순서는 받은 대로."""
-        hidden = hidden_predicate(ctx, active_packs(ctx, False))
+        hidden = hidden_predicate(ctx, active_packs(ctx, False), today)
         if hidden is None:
             return []
         found = await channels.visible_docs(self.pool, hidden + Sql(" AND d.doc_id = ANY($?::text[])", (doc_ids,)))
         return [d for d in dict.fromkeys(doc_ids) if d in found]
 
-    async def discoverable_hints(self, q: str, ctx: AuthContext) -> list[DiscoverHint]:
+    async def unverified_doc_ids(self, doc_ids: list[str], ctx: AuthContext, *, today: date) -> set[str]:
+        """응답에 낼 문서 중 낡은 현행 문서(`unverified` 배지, 경계 계약 4.11). 열람·현행 조건을 한 번 더 걸어 읽음."""
+        # ponytail: split_header(머리말 읽기)가 documents.service 에 있어 순환 import 를 피하려고 안에서 import. 공유 모듈로 옮겨 오면 위로 올림
+        from rag_api.documents.service import stale_docs
+        return await stale_docs(self.pool, acl_predicate(ctx, active_packs(ctx, True), today), list(dict.fromkeys(doc_ids)), today, self.cfg)
+
+    async def discoverable_hints(self, q: str, ctx: AuthContext, *, today: date) -> list[DiscoverHint]:
         """볼 수 없는 공개 표시 문서 중 제목이 질의와 겹치는 것(설계 §3). user·ACTIVE·비ADMIN 이 아니면 빈 목록."""
         packs = active_packs(ctx, False)
-        hidden = hidden_predicate(ctx, packs)
+        hidden = hidden_predicate(ctx, packs, today)
         if hidden is None:
             return []
         dictionary = ontology.current()
@@ -223,11 +231,11 @@ class KnowledgeEngine:
                 hits.append((-overlap, r["doc_id"], DiscoverHint(r["doc_id"], r["title"], r["dept_name"], r["dept_owner"])))
         return [h[2] for h in sorted(hits)][: self.cfg.discover_hint_limit]
 
-    async def procedure_graph(self, doc_ids: list[str], ctx: AuthContext) -> list[GraphItem]:
+    async def procedure_graph(self, doc_ids: list[str], ctx: AuthContext, *, today: date) -> list[GraphItem]:
         """요청 문서(볼 수 있는 현행 문서만)의 협업 그래프(설계 §5). 가리키는 문서는 한 번에 조회."""
         packs = active_packs(ctx, False)
-        metas = await channels.graph_meta(self.pool, acl_predicate(ctx, packs), doc_ids)
+        metas = await channels.graph_meta(self.pool, acl_predicate(ctx, packs, today), doc_ids)
         targets = set().union(*map(_referenced_ids, metas.values()))
-        visible, owners = (await channels.graph_targets(self.pool, visible_predicate(ctx, packs), sorted(targets))
+        visible, owners = (await channels.graph_targets(self.pool, visible_predicate(ctx, packs), sorted(targets), today)
                            if targets else ({}, {}))
         return [GraphItem(d, filter_graph(d, metas[d], visible, owners)) for d in doc_ids if metas.get(d)]

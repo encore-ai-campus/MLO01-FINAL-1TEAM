@@ -3,16 +3,18 @@
 `knowledge_engine.retrieve` 결과를 문서 단위로 묶어 03A 응답으로 정리합니다. 생성 LLM 클라이언트를 import 하지 않습니다.
 """
 import dataclasses
-from datetime import date, datetime
+from collections.abc import Set
+from datetime import date
 
 from rag_api.auth.context import AuthContext
-from rag_api.contracts.common import KST, ApiError, Status, discoverable_notices, version_badge
+from rag_api.contracts.common import ApiError, Status, discoverable_notices, version_badge
 from rag_api.contracts.search import ConceptChip, DocumentHit, SearchRequest, SearchResponse, Snippet, TermCard
 from rag_api.knowledge_engine.acl import active_packs
 from rag_api.knowledge_engine.engine import KnowledgeEngine
 from rag_api.knowledge_engine.types import DocMeta, RetrievalQuery, RetrievedChunk
 from rag_api.rules.values import Rules
 from rag_api.settings import ontology
+from rag_api.shared.current_version import today_kst
 from rag_api.shared.tokenize import _normalize
 
 TEMPLATE, CASE = "standard_template", "benchmark_reference"  # 사규가 아닌 참고 자료: documents·total 이 아니라 따로(reference_templates·reference_cases)
@@ -29,7 +31,7 @@ def _decode_cursor(cursor: str | None) -> int:
 
 
 def group(chunks: list[RetrievedChunk], departments: dict[str, str], snippets_per_doc: int, snippet_chars: int,
-          today: date) -> list[DocumentHit]:
+          today: date, stale: Set[str] = frozenset()) -> list[DocumentHit]:
     """청크 순위대로 문서 단위로 묶음. 문서 순서는 그 문서의 첫 청크 순위, 발췌는 문서마다 앞에서부터."""
     grouped: dict[str, tuple[DocMeta, list[Snippet]]] = {}
     for c in chunks:
@@ -37,7 +39,7 @@ def group(chunks: list[RetrievedChunk], departments: dict[str, str], snippets_pe
         if len(snippets) < snippets_per_doc:
             snippets.append(Snippet(chunk_id=c.chunk_id, section_path=c.section_path, text=c.content[:snippet_chars]))
     return [DocumentHit(**dataclasses.asdict(m), dept_name=departments.get(m.dept_owner, m.dept_owner),
-                        version_badge=version_badge(m.effective_from, today), snippets=s)
+                        version_badge=version_badge(m.effective_from, today, stale=m.doc_id in stale), snippets=s)
             for m, s in grouped.values()]
 
 
@@ -59,6 +61,7 @@ def term_cards(query: str, ctx: AuthContext, packs: list[str]) -> list[TermCard]
 async def search_documents(engine: KnowledgeEngine, departments: dict[str, str], rules: Rules, req: SearchRequest,
                            ctx: AuthContext, trace_id: str, today: date | None = None) -> SearchResponse:
     cfg = engine.cfg
+    today = today or today_kst()  # 현행 판 조건·배지가 같은 "오늘"을 씀(요청마다 한 번)
     offset = _decode_cursor(req.cursor)
     first = offset == 0
     # 표준 양식·외부 참고 사례는 doc_types 와 관계없이 따로 오므로 유형 필터에 늘 더함
@@ -66,11 +69,12 @@ async def search_documents(engine: KnowledgeEngine, departments: dict[str, str],
     doc_types = tuple(dict.fromkeys([*req.doc_types, TEMPLATE, CASE])) if req.doc_types else ()
     # ponytail: 쪽마다 다시 찾음. 결과 상위 N(RESULT_TOP_N) 이 그대로라 순서가 같음. 상위 N 밖으로는 쪽을 넘기지 못함
     res = await engine.retrieve(RetrievalQuery(req.query, "hybrid", tuple(req.dept_filter), doc_types,
-                                               req.include_benchmark), ctx)
-    hits = group(res.chunks, departments, cfg.snippets_per_doc, cfg.snippet_chars, today or datetime.now(KST).date())
+                                               req.include_benchmark), ctx, today=today)
+    stale = await engine.unverified_doc_ids([c.doc.doc_id for c in res.chunks], ctx, today=today)
+    hits = group(res.chunks, departments, cfg.snippets_per_doc, cfg.snippet_chars, today, stale)
     documents = [h for h in hits if h.doc_type not in (TEMPLATE, CASE)]
     # 존재 공개 안내는 결과 건수와 관계없이 첫 쪽에(7차 회신 2.3절). 대상 판정(ACTIVE 비ADMIN)·볼 수 없는 문서만은 엔진이 함
-    notices = discoverable_notices(await engine.discoverable_hints(req.query, ctx), departments,
+    notices = discoverable_notices(await engine.discoverable_hints(req.query, ctx, today=today), departments,
                                    rules.cooperation_request) if first else []
     end = offset + req.limit
     return SearchResponse(

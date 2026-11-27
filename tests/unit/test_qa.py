@@ -62,25 +62,34 @@ class FakeEngine:
         self.cfg = Config(database_url="x")
         self.results, self.visible, self.hints, self.graph = list(results), visible, list(hints), graph or {}
         self.hidden, self.hidden_calls = set(hidden), []  # 볼 수 없는 현행 문서(감사 ACL_DENIED 대상)
-        self.queries, self.visible_calls, self.graph_calls = [], [], []
+        self.queries, self.visible_calls, self.graph_calls, self.todays, self.stale = [], [], [], [], set()
 
-    async def retrieve(self, q, ctx):
+    async def retrieve(self, q, ctx, *, today):
         self.queries.append(q)
+        self.todays.append(today)
         return self.results[min(len(self.queries), len(self.results)) - 1]
 
-    async def visible_doc_ids(self, doc_ids, ctx):
+    async def visible_doc_ids(self, doc_ids, ctx, *, today):
         self.visible_calls.append(doc_ids)
+        self.todays.append(today)
         return [d for d in doc_ids if d in self.visible]
 
-    async def hidden_doc_ids(self, doc_ids, ctx):
+    async def hidden_doc_ids(self, doc_ids, ctx, *, today):
         self.hidden_calls.append(doc_ids)
+        self.todays.append(today)
         return [d for d in doc_ids if d in self.hidden]
 
-    async def discoverable_hints(self, q, ctx):
+    async def unverified_doc_ids(self, doc_ids, ctx, *, today):
+        self.todays.append(today)
+        return self.stale & set(doc_ids)
+
+    async def discoverable_hints(self, q, ctx, *, today):
+        self.todays.append(today)
         return self.hints
 
-    async def procedure_graph(self, doc_ids, ctx):
+    async def procedure_graph(self, doc_ids, ctx, *, today):
         self.graph_calls.append(doc_ids)
+        self.todays.append(today)
         return [GraphItem(d, {"conflicts": self.graph[d]}) for d in doc_ids if d in self.graph]
 
 
@@ -359,6 +368,29 @@ def test_clause_label():
     assert cl("윤리 헌장", "제1장 헌장 > 제1조 (목적) & 제2조 (실천 기준표)") == "[윤리 헌장 제1조·제2조]"  # 조각마다
     assert cl("정관", "제1장 > 제2조 (상법 제289조 기재 사항) & 제3조의2 (공고)") == "[정관 제2조·제3조의2]"  # 제목 안 법 조는 뺌
     assert cl("계약 가이드", "제1장 총칙 > 하도급법 시행령 제7조의4 적용") == "[계약 가이드]"  # 조각 맨 앞이 아님
+
+
+def test_unverified_badge_on_evidence_cards_and_excerpts_and_scheduled_wins(enough):
+    chunks = [chunk("P0"), chunk("P1", 2), chunk("P2", 3, effective=date(2026, 11, 23)), chunk("P3", 4)]
+    engine = FakeEngine(result(chunks))
+    engine.stale = {"P0", "P2"}
+    r = ask(engine, llm=FakeLLM(sentences(("답.", [1, 2, 3]))))
+    assert [(e.doc_id, e.version_badge) for e in r.evidence] == [("P0", "unverified"), ("P1", None), ("P2", "scheduled")]
+    assert [n.kind for n in r.notices] == ["scheduled_revision"]  # 시행 예정 안내는 scheduled 만(낡은 문서 배지는 안내 카드를 만들지 않음)
+    r = ask(engine)  # LLM 없음 → 대체 응답 발췌도 같은 배지
+    assert [(e.doc_id, e.version_badge) for e in r.excerpts] == [("P0", "unverified"), ("P1", None), ("P2", "scheduled"), ("P3", None)]
+
+
+def test_one_today_goes_to_every_engine_call(enough):
+    """현행 판 조건·배지가 같은 "오늘"을 씀(경계 계약 4.1): 고른 문서 확인·찾기·존재 공개 안내·협업 그래프 호출 모두."""
+    engine = FakeEngine(result([chunk("P0", effective=date(2026, 11, 23))]), visible={"P0"}, graph={"P0": []})
+    r = ask(engine, llm=FakeLLM(sentences(("답.", [1]))), doc_ids=["P0"])
+    assert r.result == "answered" and r.evidence[0].version_badge == "scheduled"  # TODAY 보다 뒤
+    assert engine.visible_calls and engine.queries and engine.graph_calls
+    assert engine.todays and set(engine.todays) == {TODAY} and len(engine.todays) >= 4
+    engine = FakeEngine(result([]), visible={"P0"}, hidden={"X"})
+    ask(engine, doc_ids=["P0", "X"], pool=AuditPool())  # 못 보는 문서가 있어 hidden_doc_ids 도 부름
+    assert engine.hidden_calls and set(engine.todays) == {TODAY}
 
 
 def test_answered_r1_primary_and_secondary_evidence(enough):

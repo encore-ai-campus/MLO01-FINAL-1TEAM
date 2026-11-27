@@ -16,6 +16,7 @@ from rag_api.rules import values
 from rag_api.search import service
 from rag_api.settings import ontology
 from rag_api.settings.ontology import Concept, OntologyDictionary
+from rag_api.shared import current_version
 from rag_api.shared.config import Config
 from rag_api.shared.tokenize import ConceptTerm, load_dictionary
 from asgi_client import post
@@ -39,15 +40,21 @@ class FakeEngine:
     def __init__(self, chunks, hints=(), degraded=False, matched=()):
         self.cfg = Config(database_url="x")
         self.chunks, self.hints, self.degraded, self.matched = chunks, list(hints), degraded, list(matched)
-        self.queries, self.hint_calls = [], 0
+        self.queries, self.hint_calls, self.todays, self.stale = [], 0, [], set()
 
-    async def retrieve(self, q, ctx):
+    async def retrieve(self, q, ctx, *, today):
         self.queries.append(q)
+        self.todays.append(today)
         status = Status(True, ("EMBEDDING_UNAVAILABLE",)) if self.degraded else Status()
         return RetrievalResult(self.chunks, self.matched, Trace("v1.0", (), 0, 0), status, 0.9)
 
-    async def discoverable_hints(self, q, ctx):
+    async def unverified_doc_ids(self, doc_ids, ctx, *, today):
+        self.todays.append(today)
+        return self.stale & set(doc_ids)
+
+    async def discoverable_hints(self, q, ctx, *, today):
         self.hint_calls += 1
+        self.todays.append(today)
         return self.hints
 
 
@@ -65,6 +72,27 @@ def dictionary():
 def search(engine, ctx=ANON, today: date | None = TODAY, rules=values.load(), **req):
     return asyncio.run(service.search_documents(engine, DEPTS, rules, SearchRequest(**{"query": "정산 기준", **req}),
                                                 ctx, "srch-test", today))
+
+
+def test_one_today_goes_to_the_engine_calls_and_the_badges():
+    """요청마다 한 번 정한 오늘을 찾기·존재 공개 안내(현행 판 조건)와 배지가 같이 씀. 오늘을 안 주면 서비스가 한국 날짜로 한 번 정함."""
+    engine = FakeEngine([chunk("A", 1, effective=date(2026, 11, 23))])
+    r = search(engine)
+    assert engine.todays == [TODAY, TODAY, TODAY] and r.documents[0].version_badge == "scheduled"
+    engine = FakeEngine([])
+    search(engine, today=None)
+    assert len(engine.todays) == 3 and len(set(engine.todays)) == 1 and isinstance(engine.todays[0], date)
+
+
+def test_unverified_badge_for_stale_docs_everywhere_and_scheduled_wins():
+    """낡은 문서(엔진이 가려 줌)는 문서·표준 양식·외부 사례 어느 쪽에 나와도 unverified. 시행 예정이면 scheduled 가 앞섬(4.11)."""
+    chunks = [chunk("A", 1), chunk("B", 1, effective=date(2026, 11, 23)), chunk("C", 1), chunk("STD", 1, "standard_template"),
+              chunk("BM", 1, "benchmark_reference")]
+    engine = FakeEngine(chunks)
+    engine.stale = {"A", "B", "STD", "BM"}
+    r = search(engine, include_benchmark=True)
+    assert {d.doc_id: d.version_badge for d in r.documents} == {"A": "unverified", "B": "scheduled", "C": None}
+    assert [(d.doc_id, d.version_badge) for d in r.reference_templates + r.reference_cases] == [("STD", "unverified"), ("BM", "unverified")]
 
 
 def test_group_order_snippets_and_badge():
@@ -90,7 +118,7 @@ def test_badge_uses_korean_date(monkeypatch, utc, badges):
         @classmethod
         def now(cls, tz=None):
             return utc.astimezone(tz)
-    monkeypatch.setattr(service, "datetime", Frozen)
+    monkeypatch.setattr(current_version, "datetime", Frozen)  # 한국 날짜 계산은 shared.current_version.today_kst 한 곳
     engine = FakeEngine([chunk("A", 1, effective=date(2026, 11, 23)), chunk("B", 1, effective=date(2026, 11, 24))])
     r = search(engine, today=None)  # 오늘을 주지 않으면 서비스가 정함
     assert [d.version_badge for d in r.documents] == badges

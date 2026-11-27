@@ -1,7 +1,7 @@
 import asyncio
 from collections import Counter
 from dataclasses import fields
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from conftest import DOCS, FakeEmbedder, chunk_embed_text, fake_vec
@@ -15,6 +15,7 @@ from rag_api.shared.config import Config
 from rag_api.shared.tokenize import tokenize_ko
 
 NOW = datetime(2026, 11, 21)
+TODAY = date(2026, 11, 25)  # 현행 판 조건의 오늘(시험 문서는 종료일이 없어 어느 날이든 같음)
 
 
 def user(status, dept, extra=(), role="EMPLOYEE"):
@@ -62,14 +63,14 @@ def test_no_chunk_outside_acl(with_pool, who, include_benchmark):
     ctx = REQUESTERS[who]
     docs = VISIBLE[who] | ({"T-BENCH"} if include_benchmark else set())
     allowed = visible_chunks(docs)
-    where = acl_predicate(ctx, active_packs(ctx, include_benchmark))
+    where = acl_predicate(ctx, active_packs(ctx, include_benchmark), TODAY)
     query = "출장비 정산 기준"
 
     async def run(pool):
         kw = await channels.keyword(pool, where, " ".join(tokenize_ko(query)), 100)
         vec = await channels.vector(pool, where, fake_vec(query), 100)
         res = await KnowledgeEngine(pool, FakeEmbedder(), cfg(result_top_n=100)).retrieve(
-            RetrievalQuery(query, include_benchmark=include_benchmark), ctx)
+            RetrievalQuery(query, include_benchmark=include_benchmark), ctx, today=TODAY)
         return kw, vec, res
 
     kw, vec, res = with_pool(run)
@@ -96,7 +97,7 @@ def test_related_docs_respect_acl_and_pick_best_chunk(with_pool, who):
 
     async def run(pool):
         config = cfg(ontology_expansion_enabled=True, keyword_top_k=0, vector_channel_enabled=False, result_top_n=100)
-        return await KnowledgeEngine(pool, FakeEmbedder(), config).retrieve(RetrievalQuery(query), ctx)
+        return await KnowledgeEngine(pool, FakeEmbedder(), config).retrieve(RetrievalQuery(query), ctx, today=TODAY)
 
     res = with_pool(run)
     assert [c.concept_id for c in res.matched_concepts] == ["CON-T-001"]
@@ -112,7 +113,7 @@ def test_narrow_scope_still_fills_top_k(with_pool):
     query = "연봉 밴드 기준 연봉 밴드 표"
 
     async def top3(pool, ctx):
-        where = acl_predicate(ctx, active_packs(ctx, False))
+        where = acl_predicate(ctx, active_packs(ctx, False), TODAY)
         kw = await channels.keyword(pool, where, " ".join(tokenize_ko(query)), 3)
         vec = await channels.vector(pool, where, fake_vec(query), 3)
         return [r["doc_id"] for r in kw], [r["doc_id"] for r in vec]
@@ -148,7 +149,7 @@ def test_halfvec_text_argument(with_pool):
         dist = await pool.fetchval("SELECT embedding <=> $1::halfvec FROM chunks WHERE chunk_id = 'T-ALL::v1.0::c001'",
                                    str(fake_vec(text)))
         ctx = REQUESTERS["system"]
-        top = await channels.vector(pool, acl_predicate(ctx, active_packs(ctx, False)), fake_vec(text), 1)
+        top = await channels.vector(pool, acl_predicate(ctx, active_packs(ctx, False), TODAY), fake_vec(text), 1)
         return dist, top
 
     dist, top = with_pool(run)
@@ -159,7 +160,7 @@ def test_halfvec_text_argument(with_pool):
 def test_embedding_failure_degrades_to_keyword(with_pool):
     async def run(pool):
         eng = KnowledgeEngine(pool, FakeEmbedder(fail=ConnectionError("down")), cfg())
-        return await eng.retrieve(RetrievalQuery("출장비 정산 기준"), REQUESTERS["hr"])
+        return await eng.retrieve(RetrievalQuery("출장비 정산 기준"), REQUESTERS["hr"], today=TODAY)
 
     res = with_pool(run)
     assert res.status.degraded and res.status.reason_codes == ("EMBEDDING_UNAVAILABLE",)
@@ -187,7 +188,7 @@ def steps(item, key):
 def test_procedure_graph_drops_invisible_keeps_retired(with_pool, who):
     seeable = VISIBLE[who] | NOT_CURRENT_PUBLIC
     items = with_pool(lambda pool: KnowledgeEngine(pool, FakeEmbedder(), cfg()).procedure_graph(
-        ["T-PUB", "T-ALL", "T-HR"], REQUESTERS[who]))
+        ["T-PUB", "T-ALL", "T-HR"], REQUESTERS[who], today=TODAY))
     assert [i.source_doc_id for i in items] == [d for d in ("T-PUB", "T-ALL") if d in VISIBLE[who]]  # T-HR 은 그래프 없음
     for item in items:
         g = GRAPHS[item.source_doc_id]
@@ -223,7 +224,7 @@ def test_procedure_graph_drops_invisible_keeps_retired(with_pool, who):
 def test_graph_channel_adds_seed_and_only_visible_neighbors(with_pool, who):
     """셋째 목록 = 상위 문서(T-PUB) 자신, 그 뒤에 앞뒤 단계(T-ALL·T-REV·T-RETIRED) 중 볼 수 있는 현행 문서만(단계 순)."""
     res = with_pool(lambda pool: KnowledgeEngine(pool, FakeEmbedder(), cfg(graph_seed_docs=1, result_top_n=100)).retrieve(
-        RetrievalQuery("회사 소개", strategy="graph_hybrid"), REQUESTERS[who]))
+        RetrievalQuery("회사 소개", strategy="graph_hybrid"), REQUESTERS[who], today=TODAY))
     expected = ["T-PUB", *(d for d in ("T-ALL", "T-REV", "T-RETIRED") if d in VISIBLE[who])]
     ranked = sorted((c for c in res.chunks if c.graph_rank), key=lambda c: c.graph_rank)
     assert [c.doc.doc_id for c in ranked] == expected and res.trace.graph_hits == len(expected)
@@ -236,14 +237,14 @@ def test_discoverable_hints_per_requester(with_pool, who):
     hr: T-FIN 만. hr 가 볼 수 없는 T-LGL-ECO(다른 팩)·T-LGL-OLD(폐기, 포인터 NULL)·T-LGL-BAD(포인터가 archived)는
     팩·현행 조건으로 빠짐. T-ECO·T-RETIRED·T-PUB 은 ALL_EMP·PUBLIC 이라 hr 가 볼 수 있는 열람 대상이어서 애초에 대상 아님."""
     hints = with_pool(lambda pool: KnowledgeEngine(pool, FakeEmbedder(), cfg()).discoverable_hints(
-        "인사 규정 문의", REQUESTERS[who]))
+        "인사 규정 문의", REQUESTERS[who], today=TODAY))
     assert [h.doc_id for h in hints] == (["T-FIN"] if who == "hr" else [])
 
 
 def test_discoverable_hints_order_limit_and_fields(with_pool):
     lgl = user("ACTIVE", "LGL")
     hints = lambda pool, n: KnowledgeEngine(pool, FakeEmbedder(), cfg(discover_hint_limit=n)).discoverable_hints(
-        "인사 규정 문의", lgl)
+        "인사 규정 문의", lgl, today=TODAY)
     three, one = with_pool(lambda pool: asyncio.gather(hints(pool, 3), hints(pool, 1)))
     assert three == [DiscoverHint("T-HR", "인사 규정", "인사·노무", "HR"), DiscoverHint("T-FIN", "재무 규정", "재무·회계·세무", "FIN")]
     assert one == three[:1]  # 겹친 토큰 수(2, 1) 순

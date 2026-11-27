@@ -35,7 +35,7 @@ class DocumentHit(BaseModel):
     version_id: UUID
     version_tag: str
     effective_from: date
-    version_badge: Literal["scheduled"] | None
+    version_badge: Literal["scheduled", "unverified"] | None
     snippets: list[Snippet]
 
 

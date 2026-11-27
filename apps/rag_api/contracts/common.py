@@ -1,6 +1,7 @@
 """공통 응답·오류 모양(약속서 00 3·4절)과 검색·답변이 같이 쓰는 카드·배지."""
+import calendar
 import uuid
-from datetime import date, timedelta, timezone
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import Request
@@ -38,13 +39,24 @@ def trace_id(request: Request) -> str:
     return request.state.trace_id
 
 
-# 한국은 1988년 이후 서머타임 없음. 배지의 "오늘"은 서버 시간대와 관계없이 한국 날짜(검색 API 계획 6절)
-KST = timezone(timedelta(hours=9))
+def add_months(d: date, months: int) -> date:
+    """달력 개월 더하기. 달 끝은 그달 마지막 날로 맞춤(2026-08-31 + 6 = 2027-02-28)."""
+    year, month = divmod(d.month - 1 + months, 12)
+    year, month = d.year + year, month + 1
+    return date(year, month, min(d.day, calendar.monthrange(year, month)[1]))
 
 
-def version_badge(effective_from: date, today: date) -> Literal["scheduled"] | None:
-    """시행일이 오늘(한국 날짜)보다 뒤면 시행 예정(약속서 03A·03B 5-08)."""
-    return "scheduled" if effective_from > today else None
+def is_unverified(basis: date, long_interval: bool, today: date, cfg) -> bool:
+    """기준 날짜 + 점검 주기(긴 주기 12개월, 아니면 6개월. 경계 계약 4.11)가 오늘보다 앞이면 낡음. 같은 날까지는 아님."""
+    return add_months(basis, cfg.verify_long_interval_months if long_interval else cfg.verify_interval_months) < today
+
+
+def version_badge(effective_from: date, today: date, *, stale: bool = False) -> Literal["scheduled", "unverified"] | None:
+    """시행일이 오늘(한국 날짜)보다 뒤면 시행 예정(약속서 03A·03B 5-08). 아니면 낡은 문서(`stale`)면 unverified.
+    값은 하나만 나가므로 scheduled 가 앞섬(경계 계약 4.11)."""
+    if effective_from > today:
+        return "scheduled"
+    return "unverified" if stale else None
 
 
 class DiscoverableNotice(BaseModel):
