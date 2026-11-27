@@ -1,43 +1,63 @@
-# WEB01 / APP01 Reverse Proxy
+# Reverse Proxy Infrastructure
 
 ## Architecture
 
-Client -> WEB01:80 -> APP01:8001 -> RAG API:8000 -> DB01:5432
+Client -> WEB01:443 -> APP01:8001 -> RAG API:8000
 
-## Configuration
+## WEB01
 
-| Server | Address | Configuration |
-|---|---|---|
-| WEB01 | 192.168.0.151:80 | web01.conf |
-| APP01 | 192.168.0.158:8001 | app01.conf |
-| RAG API | 127.0.0.1:8000 | Docker |
+- IP: 192.168.0.151
+- FQDN: upmutok.officemanlab.com
+- HTTPS: TCP 443
+- TLS: 1.2 and 1.3
+- HTTP port 80: Disabled
+- Server tokens: Off
+- Certificate authority: OfficeManLab Root CA
+- API route: /api/v1/search/documents
+- Default response: HTTP 404
 
-## Deployment
+## APP01
 
-1. Install Nginx on WEB01 and APP01.
-2. Copy the corresponding configuration to /etc/nginx/sites-available/.
-3. Disable the default site.
-4. Enable the new site using a symbolic link.
-5. Validate the configuration using nginx -t.
-6. Restart Nginx when changing listening addresses.
+- IP: 192.168.0.158
+- Reverse proxy port: 8001
+- Allowed source: WEB01 (192.168.0.151)
+- Backend: 127.0.0.1:8000
+- Direct client access: Denied
 
-## Security
+## PKI Distribution
 
-- APP01 accepts proxy requests only from WEB01.
-- The RAG API retains its loopback binding.
-- WEB01 exposes only /api/v1/search/documents.
-- Existing APP01 CI/CD configuration remains unchanged.
-- Existing UI demo on WEB01 port 8080 remains unchanged.
+- Hostname: pki.officemanlab.com
+- Port: TCP 8081
+- Protocol: HTTP
+- CRL path: /root-ca.crl
+- Other paths: HTTP 404
+
+## Configuration Files
+
+- nginx.conf: WEB01 global Nginx configuration
+- web01.conf: HTTPS reverse proxy
+- app01.conf: Internal API reverse proxy
+- pki.conf: CRL distribution endpoint
 
 ## Verification
 
-- WEB01 -> APP01 API: HTTP 200
-- Client -> WEB01 -> APP01 API: HTTP 200
-- Client -> APP01 directly: HTTP 403
+- Nginx configuration test: Passed
+- HTTPS certificate validation: Passed
+- Certificate revocation check: Passed
+- HTTPS document search API: Passed
+- TCP 80 connectivity: Failed as expected
+- TCP 443 connectivity: Passed
+- CRL distribution: HTTP 200
 
-## Limitations
+## Operational Limitations
 
-- Internal development environment only.
-- HTTPS and network-level firewall policies are not yet configured.
-- Production UI and authentication integration are pending.
-- Deployment is currently manual.
+- Frontend integration is pending.
+- Legacy demo service remains on port 8080.
+- WEB01-to-APP01 traffic uses HTTP.
+- Network-level firewall policies are pending.
+- Configuration deployment is currently manual.
+
+## Related Documentation
+
+- ../dns/README.md
+- ../pki/README.md

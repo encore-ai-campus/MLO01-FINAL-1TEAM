@@ -1,0 +1,8 @@
+[server_cert]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:upmutok.officemanlab.com
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+crlDistributionPoints=URI:http://pki.officemanlab.com:8081/root-ca.crl
